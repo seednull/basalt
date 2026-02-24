@@ -206,7 +206,7 @@ Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape sha
 			if (closest_distance < distance_z)
 			{
 				closest_distance = distance_z;
-				normal = (Basalt_Vec3){0.0f, 0.0f, diff.y < 0.0f ? -1.0f : 1.0f};
+				normal = (Basalt_Vec3){0.0f, 0.0f, diff.z < 0.0f ? -1.0f : 1.0f};
 			}
 			
 			penetration->x = normal.x;
