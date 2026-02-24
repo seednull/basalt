@@ -58,11 +58,36 @@ typedef enum Basalt_Result_t
 	BASALT_RESULT_ENUM_FORCE32 = 0x7FFFFFFF,
 } Basalt_Result;
 
+typedef enum Basalt_ShapeType_t
+{
+	BASALT_SHAPE_TYPE_SPHERE = 0,
+	BASALT_SHAPE_TYPE_CAPSULE,
+	BASALT_SHAPE_TYPE_BOX,
+
+	BASALT_SHAPE_TYPE_ENUM_MAX,
+	BASALT_SHAPE_TYPE_ENUM_FORCE32 = 0x7FFFFFFF,
+} Basalt_ShapeType;
+
+typedef enum Basalt_CapsuleAxis_t
+{
+	BASALT_CAPSULE_AXIS_X = 0,
+	BASALT_CAPSULE_AXIS_Y,
+	BASALT_CAPSULE_AXIS_Z,
+
+	BASALT_CAPSULE_AXIS_ENUM_MAX,
+	BASALT_CAPSULE_AXIS_ENUM_FORCE32 = 0x7FFFFFFF,
+} Basalt_CapsuleAxis;
+
 // Structs
 typedef struct Basalt_Vec3_t
 {
 	float x, y, z;
 } Basalt_Vec3;
+
+typedef struct Basalt_Vec4_t
+{
+	float x, y, z, w;
+} Basalt_Vec4;
 
 typedef struct Basalt_Quat_t
 {
@@ -78,10 +103,22 @@ typedef struct Basalt_InstanceDesc_t
 
 // Function pointers
 typedef Basalt_Result (*PFN_basaltDestroyInstance)(Basalt_Instance instance);
+typedef Basalt_Result (*PFN_basaltCreateShapeSphere)(Basalt_Instance instance, Basalt_Vec3 center, float radius, Basalt_Shape *shape);
+typedef Basalt_Result (*PFN_basaltCreateShapeCapsule)(Basalt_Instance instance, Basalt_Vec3 center, float radius, float height, Basalt_CapsuleAxis axis, Basalt_Shape *shape);
+typedef Basalt_Result (*PFN_basaltCreateShapeBox)(Basalt_Instance instance, Basalt_Vec3 center, Basalt_Vec3 sizes, Basalt_Shape *shape);
+typedef Basalt_Result (*PFN_basaltGetPenetration)(Basalt_Instance instance, Basalt_Shape shape, Basalt_Vec3 point, Basalt_Vec4 *penetration);
+typedef Basalt_Result (*PFN_basaltDestroyShape)(Basalt_Instance instance, Basalt_Shape shape);
 
 
 typedef struct Basalt_InstanceTable_t
 {
+	PFN_basaltCreateShapeSphere createShapeSphere;
+	PFN_basaltCreateShapeCapsule createShapeCapsule;
+	PFN_basaltCreateShapeBox createShapeBox;
+
+	PFN_basaltGetPenetration getPenetration;
+
+	PFN_basaltDestroyShape destroyShape;
 	PFN_basaltDestroyInstance destroyInstance;
 } Basalt_InstanceTable;
 
@@ -90,6 +127,13 @@ typedef struct Basalt_InstanceTable_t
 BASALT_APIENTRY Basalt_Result basaltCreateInstance(const Basalt_InstanceDesc *desc, Basalt_Instance* instance);
 BASALT_APIENTRY Basalt_Result basaltGetInstanceTable(Basalt_Instance instance, Basalt_InstanceTable *instance_table);
 
+BASALT_APIENTRY Basalt_Result basaltCreateShapeSphere(Basalt_Instance instance, Basalt_Vec3 center, float radius, Basalt_Shape *shape);
+BASALT_APIENTRY Basalt_Result basaltCreateShapeCapsule(Basalt_Instance instance, Basalt_Vec3 center, float radius, float height, Basalt_CapsuleAxis axis, Basalt_Shape *shape);
+BASALT_APIENTRY Basalt_Result basaltCreateShapeBox(Basalt_Instance instance, Basalt_Vec3 center, Basalt_Vec3 sizes, Basalt_Shape *shape);
+
+BASALT_APIENTRY Basalt_Result basaltGetPenetration(Basalt_Instance instance, Basalt_Shape shape, Basalt_Vec3 point, Basalt_Vec4 *penetration);
+
+BASALT_APIENTRY Basalt_Result basaltDestroyShape(Basalt_Instance instance, Basalt_Shape shape);
 BASALT_APIENTRY Basalt_Result basaltDestroyInstance(Basalt_Instance instance);
 #endif
 
