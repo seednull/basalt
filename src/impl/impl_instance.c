@@ -162,15 +162,14 @@ Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape sha
 			Impl_ShapeCapsule *capsule = &shape_ptr->data.capsule;
 			assert(capsule);
 
-			float p[3] = {point.x, point.y, point.z};
 			float half_height = capsule->height * 0.5f;
+			Basalt_Vec3 diff = basalt_vec3Sub(point, capsule->center);
+
+			float p[3] = {diff.x, diff.y, diff.z};
 			float proj = basalt_floatClamp(p[capsule->axis], -half_height, half_height);
+			p[capsule->axis] -= proj;
 
-			float c[3] = {0.0f, 0.0f, 0.0f};
-			c[capsule->axis] = proj;
-
-			Basalt_Vec3 center = {c[0], c[1], c[2]};
-			Basalt_Vec3 normal = basalt_vec3Sub(point, center);
+			Basalt_Vec3 normal = {p[0], p[1], p[2]};
 			float d = sqrtf(basalt_vec3Dot(normal, normal));
 			float inv_d = 1.0f / d;
 
