@@ -67,6 +67,59 @@ static BASALT_INLINE float basalt_vec3Dot(Basalt_Vec3 a, Basalt_Vec3 b)
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+static BASALT_INLINE Basalt_Quat basalt_quatConjugate(Basalt_Quat q)
+{
+	return (Basalt_Quat)
+	{
+		-q.x,
+		-q.y,
+		-q.z,
+		 q.w,
+	};
+}
+
+static BASALT_INLINE Basalt_Quat basalt_quatMul(Basalt_Quat a, Basalt_Quat b)
+{
+	return (Basalt_Quat)
+	{
+		// linear combination + cross product
+		a.w * b.x + b.w * a.x + a.y * b.z - a.z * b.y,
+		a.w * b.y + b.w * a.y + a.z * b.x - a.x * b.z,
+		a.w * b.z + b.w * a.z + a.x * b.y - a.y * b.x,
+
+		// mul                - dot product
+		a.w * b.w             - a.x * b.x - a.y * b.y - a.z * b.z,
+	};
+}
+
+static BASALT_INLINE Basalt_Quat basalt_quatMulVec3(Basalt_Quat a, Basalt_Vec3 b)
+{
+	return (Basalt_Quat)
+	{
+		// linear combination + cross product
+		a.w * b.x             + a.y * b.z - a.z * b.y,
+		a.w * b.y             + a.z * b.x - a.x * b.z,
+		a.w * b.z             + a.x * b.y - a.y * b.x,
+
+		//                    - dot product
+		                      - a.x * b.x - a.y * b.y - a.z * b.z,
+	};
+}
+
+static BASALT_INLINE Basalt_Vec3 basalt_quatRotateVec3(Basalt_Quat a, Basalt_Vec3 v)
+{
+	Basalt_Quat t = basalt_quatMulVec3(a, v);
+	t = basalt_quatMul(t, basalt_quatConjugate(a));
+
+	return (Basalt_Vec3)
+	{
+		t.x,
+		t.y,
+		t.z
+	};
+}
+
+
 /*
  */
 static void impl_destroyShape(Impl_Instance *instance_ptr, Impl_Shape *shape_ptr)
@@ -125,14 +178,17 @@ Basalt_Result impl_instanceCreateShapeBox(Basalt_Instance this, Basalt_Vec3 cent
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape shape, Basalt_Vec3 point, Basalt_Vec4 *penetration)
+Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
 {
 	assert(this);
 	assert(shape);
-	assert(penetration);
+	assert(manifold);
 
 	Basalt_PoolHandle handle = (Basalt_PoolHandle)shape;
 	assert(handle != BASALT_POOL_HANDLE_NULL);
+
+	Basalt_Quat rotation_inv = basalt_quatConjugate(transform.rotation);
+	Basalt_Vec3 local_point = basalt_quatRotateVec3(rotation_inv, basalt_vec3Sub(point, transform.position));
 
 	Impl_Instance *instance_ptr = (Impl_Instance *)this;
 	Impl_Shape *shape_ptr = (Impl_Shape *)basalt_poolGetElement(&instance_ptr->shapes, handle);
@@ -145,14 +201,24 @@ Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape sha
 			Impl_ShapeSphere *sphere = &shape_ptr->data.sphere;
 			assert(sphere);
 
-			Basalt_Vec3 normal = basalt_vec3Sub(point, sphere->center);
+			Basalt_Vec3 normal = basalt_vec3Sub(local_point, sphere->center);
 			float d = sqrtf(basalt_vec3Dot(normal, normal));
-			float inv_d = 1.0f / d;
+			float penetration = d - sphere->radius;
 
-			penetration->x = normal.x * inv_d;
-			penetration->y = normal.y * inv_d;
-			penetration->z = normal.z * inv_d;
-			penetration->w = d - sphere->radius;
+			if (penetration > 0.0f)
+				return BASALT_NO_INTERSECTION;
+
+			float inv_d = 1.0f / d;
+			normal.x *= inv_d;
+			normal.y *= inv_d;
+			normal.z *= inv_d;
+
+			manifold->normal = basalt_quatRotateVec3(transform.rotation, normal);
+			manifold->num_contacts = 1;
+			manifold->contacts[0].position = point;
+			manifold->contacts[0].penetration = penetration;
+			manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
+			manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_POINT, 0};
 
 			return BASALT_SUCCESS;
 		}
@@ -163,7 +229,7 @@ Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape sha
 			assert(capsule);
 
 			float half_height = capsule->height * 0.5f;
-			Basalt_Vec3 diff = basalt_vec3Sub(point, capsule->center);
+			Basalt_Vec3 diff = basalt_vec3Sub(local_point, capsule->center);
 
 			float p[3] = {diff.x, diff.y, diff.z};
 			float proj = basalt_floatClamp(p[capsule->axis], -half_height, half_height);
@@ -171,12 +237,22 @@ Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape sha
 
 			Basalt_Vec3 normal = {p[0], p[1], p[2]};
 			float d = sqrtf(basalt_vec3Dot(normal, normal));
-			float inv_d = 1.0f / d;
+			float penetration = d - capsule->radius;
 
-			penetration->x = normal.x * inv_d;
-			penetration->y = normal.y * inv_d;
-			penetration->z = normal.z * inv_d;
-			penetration->w = d - capsule->radius;
+			if (penetration > 0.0f)
+				return BASALT_NO_INTERSECTION;
+
+			float inv_d = 1.0f / d;
+			normal.x *= inv_d;
+			normal.y *= inv_d;
+			normal.z *= inv_d;
+
+			manifold->normal = basalt_quatRotateVec3(transform.rotation, normal);
+			manifold->num_contacts = 1;
+			manifold->contacts[0].position = point;
+			manifold->contacts[0].penetration = penetration;
+			manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, 0};
+			manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_POINT, 0};
 
 			return BASALT_SUCCESS;
 		}
@@ -187,35 +263,66 @@ Basalt_Result impl_instanceGetPenetration(Basalt_Instance this, Basalt_Shape sha
 			Impl_ShapeBox *box = &shape_ptr->data.box;
 			assert(box);
 
-			Basalt_Vec3 diff = basalt_vec3Sub(point, box->center);
+			Basalt_Vec3 diff = basalt_vec3Sub(local_point, box->center);
 			
 			float distance_x = fabsf(diff.x) - box->sizes.x * 0.5f;
 			float distance_y = fabsf(diff.y) - box->sizes.y * 0.5f;
 			float distance_z = fabsf(diff.z) - box->sizes.z * 0.5f;
 
-			float closest_distance = distance_x;
+			float penetration = distance_x;
+			uint32_t face = (diff.x < 0.0f) ? 0 : 1;
 			Basalt_Vec3 normal = (Basalt_Vec3){diff.x < 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f};
 
-			if (closest_distance < distance_y)
+			if (penetration < distance_y)
 			{
-				closest_distance = distance_y;
+				face = (diff.y < 0.0f) ? 2 : 3;
+				penetration = distance_y;
 				normal = (Basalt_Vec3){0.0f, diff.y < 0.0f ? -1.0f : 1.0f, 0.0f};
 			}
 
-			if (closest_distance < distance_z)
+			if (penetration < distance_z)
 			{
-				closest_distance = distance_z;
+				face = (diff.z < 0.0f) ? 4 : 5;
+				penetration = distance_z;
 				normal = (Basalt_Vec3){0.0f, 0.0f, diff.z < 0.0f ? -1.0f : 1.0f};
 			}
-			
-			penetration->x = normal.x;
-			penetration->y = normal.y;
-			penetration->z = normal.z;
-			penetration->w = closest_distance;
+
+			if (penetration > 0.0f)
+				return BASALT_NO_INTERSECTION;
+
+			manifold->normal = basalt_quatRotateVec3(transform.rotation, normal);
+			manifold->num_contacts = 1;
+			manifold->contacts[0].position = point;
+			manifold->contacts[0].penetration = penetration;
+			manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CONVEX_FACE, face};
+			manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_POINT, 0};
 
 			return BASALT_SUCCESS;
 		}
 	}
+
+	return BASALT_NOT_IMPLEMENTED;
+}
+
+Basalt_Result impl_instanceShapeIntersectShape(Basalt_Instance this, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold)
+{
+	BASALT_UNUSED(this);
+	BASALT_UNUSED(shape_a);
+	BASALT_UNUSED(transform_a);
+	BASALT_UNUSED(shape_b);
+	BASALT_UNUSED(transform_b);
+	BASALT_UNUSED(manifold);
+
+	return BASALT_NOT_IMPLEMENTED;
+}
+
+Basalt_Result impl_instanceShapeRaycast(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Ray ray, Basalt_RayHit *hit)
+{
+	BASALT_UNUSED(this);
+	BASALT_UNUSED(shape);
+	BASALT_UNUSED(transform);
+	BASALT_UNUSED(ray);
+	BASALT_UNUSED(hit);
 
 	return BASALT_NOT_IMPLEMENTED;
 }
@@ -269,7 +376,9 @@ static Basalt_InstanceTable instance_vtbl =
 	impl_instanceCreateShapeCapsule,
 	impl_instanceCreateShapeBox,
 
-	impl_instanceGetPenetration,
+	impl_instanceShapeIntersectPoint,
+	impl_instanceShapeIntersectShape,
+	impl_instanceShapeRaycast,
 
 	impl_instanceDestroyShape,
 	impl_instanceDestroy,

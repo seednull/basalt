@@ -70,16 +70,40 @@ Basalt_Result basaltCreateShapeBox(Basalt_Instance instance, Basalt_Vec3 center,
 	return ptr->vtbl->createShapeBox(instance, center, sizes, shape);
 }
 
-Basalt_Result basaltGetPenetration(Basalt_Instance instance, Basalt_Shape shape, Basalt_Vec3 point, Basalt_Vec4 *penetration)
+Basalt_Result basaltShapeIntersectPoint(Basalt_Instance instance, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
 {
 	if (instance == BASALT_NULL_HANDLE)
 		return BASALT_INVALID_INSTANCE;
 
 	Basalt_InstanceInternal *ptr = (Basalt_InstanceInternal *)instance;
 	assert(ptr->vtbl);
-	assert(ptr->vtbl->getPenetration);
+	assert(ptr->vtbl->shapeIntersectPoint);
 
-	return ptr->vtbl->getPenetration(instance, shape, point, penetration);
+	return ptr->vtbl->shapeIntersectPoint(instance, shape, transform, point, manifold);
+}
+
+Basalt_Result basaltShapeIntersectShape(Basalt_Instance instance, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold)
+{
+	if (instance == BASALT_NULL_HANDLE)
+		return BASALT_INVALID_INSTANCE;
+
+	Basalt_InstanceInternal *ptr = (Basalt_InstanceInternal *)instance;
+	assert(ptr->vtbl);
+	assert(ptr->vtbl->shapeIntersectShape);
+
+	return ptr->vtbl->shapeIntersectShape(instance, shape_a, transform_a, shape_b, transform_b, manifold);
+}
+
+Basalt_Result basaltShapeRaycast(Basalt_Instance instance, Basalt_Shape shape, Basalt_Transform transform, Basalt_Ray ray, Basalt_RayHit *hit)
+{
+	if (instance == BASALT_NULL_HANDLE)
+		return BASALT_INVALID_INSTANCE;
+
+	Basalt_InstanceInternal *ptr = (Basalt_InstanceInternal *)instance;
+	assert(ptr->vtbl);
+	assert(ptr->vtbl->shapeRaycast);
+
+	return ptr->vtbl->shapeRaycast(instance, shape, transform, ray, hit);
 }
 
 Basalt_Result basaltDestroyShape(Basalt_Instance instance, Basalt_Shape shape)
