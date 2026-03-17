@@ -70,6 +70,18 @@ Basalt_Result basaltCreateShapeBox(Basalt_Instance instance, Basalt_Vec3 center,
 	return ptr->vtbl->createShapeBox(instance, center, sizes, shape);
 }
 
+Basalt_Result basaltShapeGetInfo(Basalt_Instance instance, Basalt_Shape shape, Basalt_ShapeInfo *info)
+{
+	if (instance == BASALT_NULL_HANDLE)
+		return BASALT_INVALID_INSTANCE;
+
+	Basalt_InstanceInternal *ptr = (Basalt_InstanceInternal *)instance;
+	assert(ptr->vtbl);
+	assert(ptr->vtbl->shapeGetInfo);
+
+	return ptr->vtbl->shapeGetInfo(instance, shape, info);
+}
+
 Basalt_Result basaltShapeIntersectPoint(Basalt_Instance instance, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
 {
 	if (instance == BASALT_NULL_HANDLE)

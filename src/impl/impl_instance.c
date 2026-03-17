@@ -141,8 +141,8 @@ Basalt_Result impl_instanceCreateShapeSphere(Basalt_Instance this, Basalt_Vec3 c
 	Impl_Instance *instance_ptr = (Impl_Instance *)this;
 
 	Impl_Shape result = {0};
-	result.type = BASALT_SHAPE_TYPE_SPHERE;
-	result.data.sphere = (Impl_ShapeSphere){center, radius};
+	result.info.type = BASALT_SHAPE_TYPE_SPHERE;
+	result.info.data.sphere = (Basalt_ShapeDataSphere){center, radius};
 	
 	*shape = (Basalt_Shape)basalt_poolAddElement(&instance_ptr->shapes, &result);
 	return BASALT_SUCCESS;
@@ -156,8 +156,8 @@ Basalt_Result impl_instanceCreateShapeCapsule(Basalt_Instance this, Basalt_Vec3 
 	Impl_Instance *instance_ptr = (Impl_Instance *)this;
 
 	Impl_Shape result = {0};
-	result.type = BASALT_SHAPE_TYPE_CAPSULE;
-	result.data.capsule = (Impl_ShapeCapsule){center, radius, height, axis};
+	result.info.type = BASALT_SHAPE_TYPE_CAPSULE;
+	result.info.data.capsule = (Basalt_ShapeDataCapsule){center, radius, height, axis};
 	
 	*shape = (Basalt_Shape)basalt_poolAddElement(&instance_ptr->shapes, &result);
 	return BASALT_SUCCESS;
@@ -171,10 +171,27 @@ Basalt_Result impl_instanceCreateShapeBox(Basalt_Instance this, Basalt_Vec3 cent
 	Impl_Instance *instance_ptr = (Impl_Instance *)this;
 
 	Impl_Shape result = {0};
-	result.type = BASALT_SHAPE_TYPE_BOX;
-	result.data.box = (Impl_ShapeBox){center, sizes};
+	result.info.type = BASALT_SHAPE_TYPE_BOX;
+	result.info.data.box = (Basalt_ShapeDataBox){center, sizes};
 	
 	*shape = (Basalt_Shape)basalt_poolAddElement(&instance_ptr->shapes, &result);
+	return BASALT_SUCCESS;
+}
+
+Basalt_Result impl_instanceShapeGetInfo(Basalt_Instance this, Basalt_Shape shape, Basalt_ShapeInfo *info)
+{
+	assert(this);
+	assert(shape);
+	assert(info);
+
+	Basalt_PoolHandle handle = (Basalt_PoolHandle)shape;
+	assert(handle != BASALT_POOL_HANDLE_NULL);
+
+	Impl_Instance *instance_ptr = (Impl_Instance *)this;
+	Impl_Shape *shape_ptr = (Impl_Shape *)basalt_poolGetElement(&instance_ptr->shapes, handle);
+	assert(shape_ptr);
+
+	memcpy(info, &shape_ptr->info, sizeof(Basalt_ShapeInfo));
 	return BASALT_SUCCESS;
 }
 
@@ -194,11 +211,11 @@ Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shap
 	Impl_Shape *shape_ptr = (Impl_Shape *)basalt_poolGetElement(&instance_ptr->shapes, handle);
 	assert(shape_ptr);
 
-	switch (shape_ptr->type)
+	switch (shape_ptr->info.type)
 	{
 		case BASALT_SHAPE_TYPE_SPHERE:
 		{
-			Impl_ShapeSphere *sphere = &shape_ptr->data.sphere;
+			Basalt_ShapeDataSphere *sphere = &shape_ptr->info.data.sphere;
 			assert(sphere);
 
 			Basalt_Vec3 normal = basalt_vec3Sub(local_point, sphere->center);
@@ -225,7 +242,7 @@ Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shap
 
 		case BASALT_SHAPE_TYPE_CAPSULE:
 		{
-			Impl_ShapeCapsule *capsule = &shape_ptr->data.capsule;
+			Basalt_ShapeDataCapsule *capsule = &shape_ptr->info.data.capsule;
 			assert(capsule);
 
 			float half_height = capsule->height * 0.5f;
@@ -256,11 +273,10 @@ Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shap
 
 			return BASALT_SUCCESS;
 		}
-		break;
 
 		case BASALT_SHAPE_TYPE_BOX:
 		{
-			Impl_ShapeBox *box = &shape_ptr->data.box;
+			Basalt_ShapeDataBox *box = &shape_ptr->info.data.box;
 			assert(box);
 
 			Basalt_Vec3 diff = basalt_vec3Sub(local_point, box->center);
@@ -375,6 +391,8 @@ static Basalt_InstanceTable instance_vtbl =
 	impl_instanceCreateShapeSphere,
 	impl_instanceCreateShapeCapsule,
 	impl_instanceCreateShapeBox,
+
+	impl_instanceShapeGetInfo,
 
 	impl_instanceShapeIntersectPoint,
 	impl_instanceShapeIntersectShape,

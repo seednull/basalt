@@ -121,6 +121,39 @@ typedef struct Basalt_ShapeFeature_t
 	uint32_t index;
 } Basalt_ShapeFeature;
 
+typedef struct Basalt_ShapeDataSphere_t
+{
+	Basalt_Vec3 center;
+	float radius;
+} Basalt_ShapeDataSphere;
+
+typedef struct Basalt_ShapeDataCapsule_t
+{
+	Basalt_Vec3 center;
+	float radius;
+	float height;
+	Basalt_CapsuleAxis axis;
+} Basalt_ShapeDataCapsule;
+
+typedef struct Basalt_ShapeDataBox_t
+{
+	Basalt_Vec3 center;
+	Basalt_Vec3 sizes;
+} Basalt_ShapeDataBox;
+
+typedef union Basalt_ShapeData_t
+{
+	Basalt_ShapeDataSphere sphere;
+	Basalt_ShapeDataCapsule capsule;
+	Basalt_ShapeDataBox box;
+} Basalt_ShapeData;
+
+typedef struct Basalt_ShapeInfo_t
+{
+	Basalt_ShapeType type;
+	Basalt_ShapeData data;
+} Basalt_ShapeInfo;
+
 typedef struct Basalt_Contact_t
 {
 	Basalt_Vec3 position;
@@ -159,12 +192,17 @@ typedef struct Basalt_InstanceDesc_t
 
 // Function pointers
 typedef Basalt_Result (*PFN_basaltDestroyInstance)(Basalt_Instance instance);
+
 typedef Basalt_Result (*PFN_basaltCreateShapeSphere)(Basalt_Instance instance, Basalt_Vec3 center, float radius, Basalt_Shape *shape);
 typedef Basalt_Result (*PFN_basaltCreateShapeCapsule)(Basalt_Instance instance, Basalt_Vec3 center, float radius, float height, Basalt_CapsuleAxis axis, Basalt_Shape *shape);
 typedef Basalt_Result (*PFN_basaltCreateShapeBox)(Basalt_Instance instance, Basalt_Vec3 center, Basalt_Vec3 sizes, Basalt_Shape *shape);
+
+typedef Basalt_Result (*PFN_basaltShapeGetInfo)(Basalt_Instance instance, Basalt_Shape shape, Basalt_ShapeInfo *info);
+
 typedef Basalt_Result (*PFN_basaltShapeIntersectPoint)(Basalt_Instance instance, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold);
 typedef Basalt_Result (*PFN_basaltShapeIntersectShape)(Basalt_Instance instance, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold);
 typedef Basalt_Result (*PFN_basaltShapeRaycast)(Basalt_Instance instance, Basalt_Shape shape, Basalt_Transform transform, Basalt_Ray ray, Basalt_RayHit *hit);
+
 typedef Basalt_Result (*PFN_basaltDestroyShape)(Basalt_Instance instance, Basalt_Shape shape);
 
 
@@ -173,6 +211,8 @@ typedef struct Basalt_InstanceTable_t
 	PFN_basaltCreateShapeSphere createShapeSphere;
 	PFN_basaltCreateShapeCapsule createShapeCapsule;
 	PFN_basaltCreateShapeBox createShapeBox;
+
+	PFN_basaltShapeGetInfo shapeGetInfo;
 
 	PFN_basaltShapeIntersectPoint shapeIntersectPoint;
 	PFN_basaltShapeIntersectShape shapeIntersectShape;
@@ -190,6 +230,8 @@ BASALT_APIENTRY Basalt_Result basaltGetInstanceTable(Basalt_Instance instance, B
 BASALT_APIENTRY Basalt_Result basaltCreateShapeSphere(Basalt_Instance instance, Basalt_Vec3 center, float radius, Basalt_Shape *shape);
 BASALT_APIENTRY Basalt_Result basaltCreateShapeCapsule(Basalt_Instance instance, Basalt_Vec3 center, float radius, float height, Basalt_CapsuleAxis axis, Basalt_Shape *shape);
 BASALT_APIENTRY Basalt_Result basaltCreateShapeBox(Basalt_Instance instance, Basalt_Vec3 center, Basalt_Vec3 sizes, Basalt_Shape *shape);
+
+BASALT_APIENTRY Basalt_Result basaltShapeGetInfo(Basalt_Instance instance, Basalt_Shape shape, Basalt_ShapeInfo *info);
 
 BASALT_APIENTRY Basalt_Result basaltShapeIntersectPoint(Basalt_Instance instance, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold);
 BASALT_APIENTRY Basalt_Result basaltShapeIntersectShape(Basalt_Instance instance, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold);
