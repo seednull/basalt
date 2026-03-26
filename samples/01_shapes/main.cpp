@@ -10,15 +10,17 @@ void testShapes(Basalt_Instance instance)
 	Basalt_Result result = basaltCreateShapeSphere(instance, center, 1.0f, &shape);
 	assert(result == BASALT_SUCCESS);
 	
+	Basalt_Transform shape_transform = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 	Basalt_Vec3 point = {0.5f, 0.0f, 0.0f};
-	Basalt_Vec4 penetration = {0.0f, 0.0f, 0.0f, 0.0f};
+	Basalt_ContactManifold manifold = {};
 
-	result = basaltGetPenetration(instance, shape, point, &penetration);
+	result = basaltShapeIntersectPoint(instance, shape, shape_transform, point, &manifold);
 	assert(result == BASALT_SUCCESS);
-	assert(fabs(penetration.x - 1.0f) < 1e-06);
-	assert(penetration.y == 0.0f);
-	assert(penetration.z == 0.0f);
-	assert(fabs(penetration.w + 0.5f) < 1e-06);
+	assert(fabs(manifold.normal.x - 1.0f) < 1e-06);
+	assert(manifold.normal.y == 0.0f);
+	assert(manifold.normal.z == 0.0f);
+	assert(manifold.num_contacts == 1);
+	assert(fabs(manifold.contacts->penetration + 0.5f) < 1e-06);
 
 	result = basaltDestroyShape(instance, shape);
 	assert(result == BASALT_SUCCESS);
