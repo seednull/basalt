@@ -179,7 +179,7 @@ typedef struct Basalt_RayHit_t
 {
 	Basalt_Vec3 point;
 	Basalt_Vec3 normal;
-	Basalt_Shape shape;
+	Basalt_ShapeFeature feature;
 	float distance;
 } Basalt_RayHit;
 
