@@ -8,6 +8,10 @@
 
 /*
  */
+typedef Basalt_Result (*PFN_basalt_shapeShapeIntersection)(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold);
+
+/*
+ */
 static BASALT_INLINE float basalt_floatMin(float a, float b)
 {
 	return a < b ? a : b;
@@ -142,6 +146,30 @@ static BASALT_INLINE Basalt_Vec3 basalt_quatRotateVec3(Basalt_Quat a, Basalt_Vec
 	};
 }
 
+static BASALT_INLINE Basalt_Transform basalt_invertTransform(Basalt_Transform t)
+{
+	Basalt_Quat rotation = basalt_quatConjugate(t.rotation);
+	Basalt_Vec3 position = basalt_quatRotateVec3(rotation, (Basalt_Vec3){-t.position.x, -t.position.y, -t.position.z});
+
+	return (Basalt_Transform)
+	{
+		position,
+		rotation,
+	};
+}
+
+static BASALT_INLINE Basalt_Transform basalt_mulTransform(Basalt_Transform a, Basalt_Transform b)
+{
+	Basalt_Quat rotation = basalt_quatMul(a.rotation, b.rotation);
+	Basalt_Vec3 position = basalt_vec3Add(a.position, basalt_quatRotateVec3(a.rotation, b.position));
+
+	return (Basalt_Transform)
+	{
+		position,
+		rotation,
+	};
+}
+
 /*
  */
 static BASALT_INLINE Basalt_Result basalt_spherePointIntersection(const Basalt_ShapeDataSphere *sphere, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
@@ -256,6 +284,183 @@ static BASALT_INLINE Basalt_Result basalt_boxPointIntersection(const Basalt_Shap
 	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_POINT, 0};
 
 	return BASALT_SUCCESS;
+}
+
+/*
+ */
+static BASALT_INLINE Basalt_Result basalt_sphereSphereIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
+{
+	assert(info_a);
+	assert(info_a->type == BASALT_SHAPE_TYPE_SPHERE);
+	assert(info_b);
+	assert(info_b->type == BASALT_SHAPE_TYPE_SPHERE);
+	assert(manifold);
+
+	Basalt_ShapeDataSphere sphere_a = info_a->data.sphere;
+	Basalt_ShapeDataSphere sphere_b = info_b->data.sphere;
+
+	sphere_b.center = basalt_vec3Add(transform.position, basalt_quatRotateVec3(transform.rotation, sphere_b.center));
+
+	Basalt_Vec3 delta = basalt_vec3Sub(sphere_b.center, sphere_a.center);
+	float r_sum = sphere_a.radius + sphere_b.radius;
+
+	float l_sqr = basalt_vec3Dot(delta, delta);
+	if (l_sqr > r_sum * r_sum)
+		return BASALT_NO_INTERSECTION;
+
+	float l = sqrt(l_sqr);
+	float l_inv = 1.0f / l;
+
+	float penetration = l - r_sum;
+
+	manifold->normal = (Basalt_Vec3){delta.x * l_inv, delta.y * l_inv, delta.z * l_inv};
+	manifold->num_contacts = 1;
+	manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
+	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
+	manifold->contacts[0].position = basalt_vec3Mad(delta, 0.5f, sphere_a.center);
+	manifold->contacts[0].penetration = penetration * 0.5f;
+
+	return BASALT_SUCCESS;
+}
+
+static BASALT_INLINE Basalt_Result basalt_capsuleSphereIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
+{
+	assert(info_a);
+	assert(info_a->type == BASALT_SHAPE_TYPE_CAPSULE);
+	assert(info_b);
+	assert(info_b->type == BASALT_SHAPE_TYPE_SPHERE);
+	assert(manifold);
+
+	Basalt_ShapeDataCapsule capsule_a = info_a->data.capsule;
+	Basalt_ShapeDataSphere sphere_b = info_b->data.sphere;
+
+	sphere_b.center = basalt_vec3Add(transform.position, basalt_quatRotateVec3(transform.rotation, sphere_b.center));
+
+	static Basalt_Vec3 capsule_axes[3] =
+	{
+		{1.0f, 0.0f, 0.0f},
+		{0.0f, 1.0f, 0.0f},
+		{0.0f, 0.0f, 1.0f},
+	};
+
+	Basalt_Vec3 axis = capsule_axes[capsule_a.axis];
+	float half_height = capsule_a.height * 0.5f;
+
+	Basalt_Vec3 origin = basalt_vec3Sub(sphere_b.center, capsule_a.center);
+
+	float sphere_offsets[2] = {-half_height, half_height};
+	float sphere_center_proj = basalt_vec3Dot(origin, axis);
+	
+	uint32_t feature_index = 2;
+	if (sphere_center_proj < -half_height)
+	{
+		sphere_center_proj = -half_height;
+		feature_index = 0;
+	}
+	else if (sphere_center_proj > half_height)
+	{
+		sphere_center_proj = half_height;
+		feature_index = 1;
+	}
+
+	Basalt_Vec3 closest_point = basalt_vec3Mad(axis, sphere_center_proj, capsule_a.center);
+	Basalt_Vec3 delta = basalt_vec3Sub(sphere_b.center, closest_point);
+	float r_sum = capsule_a.radius + sphere_b.radius;
+
+	float l_sqr = basalt_vec3Dot(delta, delta);
+	if (l_sqr > r_sum * r_sum)
+		return BASALT_NO_INTERSECTION;
+
+	float l = sqrt(l_sqr);
+	float l_inv = 1.0f / l;
+
+	float penetration = l - r_sum;
+
+	manifold->normal = (Basalt_Vec3){delta.x * l_inv, delta.y * l_inv, delta.z * l_inv};
+	manifold->num_contacts = 1;
+	manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, feature_index};
+	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
+	manifold->contacts[0].position = basalt_vec3Mad(delta, 0.5f, closest_point);
+	manifold->contacts[0].penetration = penetration * 0.5f;
+
+	return BASALT_SUCCESS;
+}
+
+static BASALT_INLINE Basalt_Result basalt_boxSphereIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
+{
+	assert(info_a);
+	assert(info_a->type == BASALT_SHAPE_TYPE_BOX);
+	assert(info_b);
+	assert(info_b->type == BASALT_SHAPE_TYPE_SPHERE);
+	assert(manifold);
+
+	Basalt_ShapeDataBox box_a = info_a->data.box;
+	Basalt_ShapeDataSphere sphere_b = info_b->data.sphere;
+
+	Basalt_Vec3 half_sizes = {box_a.sizes.x * 0.5f, box_a.sizes.y * 0.5f, box_a.sizes.z};
+
+	sphere_b.center = basalt_vec3Add(transform.position, basalt_quatRotateVec3(transform.rotation, sphere_b.center));
+
+	Basalt_Vec3 clipped = basalt_vec3Sub(sphere_b.center, box_a.center);
+	clipped.x = basalt_floatClamp(clipped.x, -half_sizes.x, half_sizes.x);
+	clipped.y = basalt_floatClamp(clipped.y, -half_sizes.y, half_sizes.y);
+	clipped.z = basalt_floatClamp(clipped.z, -half_sizes.z, half_sizes.z);
+	clipped = basalt_vec3Add(clipped, box_a.center);
+
+	Basalt_Vec3 delta = basalt_vec3Sub(sphere_b.center, clipped);
+	float l_sqr = basalt_vec3Dot(delta, delta);
+
+	if (l_sqr > sphere_b.radius * sphere_b.radius)
+		return BASALT_NO_INTERSECTION;
+
+	float l = sqrtf(l_sqr);
+	float l_inv = 1.0f / l;
+
+	float penetration = l - sphere_b.radius;
+
+	Basalt_Vec3 diff = basalt_vec3Sub(clipped, box_a.center);
+	float distance_x = fabsf(diff.x) - half_sizes.x;
+	float distance_y = fabsf(diff.y) - half_sizes.y;
+	float distance_z = fabsf(diff.z) - half_sizes.z;
+
+	float closest_feature = distance_x;
+	uint32_t face = (diff.x < 0.0f) ? 0 : 1;
+
+	if (closest_feature < distance_y)
+	{
+		face = (diff.y < 0.0f) ? 2 : 3;
+		closest_feature = distance_y;
+	}
+
+	if (closest_feature < distance_z)
+	{
+		face = (diff.z < 0.0f) ? 4 : 5;
+		closest_feature = distance_z;
+	}
+
+	manifold->normal = (Basalt_Vec3){delta.x * l_inv, delta.y * l_inv, delta.z * l_inv};
+	manifold->num_contacts = 1;
+	manifold->contacts[0].position = clipped;
+	manifold->contacts[0].penetration = penetration;
+	manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CONVEX_FACE, face};
+	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
+
+	return BASALT_SUCCESS;
+}
+
+static BASALT_INLINE Basalt_Result basalt_capsuleCapsuleIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
+{
+	return BASALT_NOT_IMPLEMENTED;
+}
+
+static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
+{
+	return BASALT_NOT_IMPLEMENTED;
+}
+
+static BASALT_INLINE Basalt_Result basalt_boxBoxIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
+{
+	return BASALT_NOT_IMPLEMENTED;
 }
 
 /*
@@ -674,14 +879,82 @@ Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shap
 
 Basalt_Result impl_instanceShapeIntersectShape(Basalt_Instance this, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold)
 {
-	BASALT_UNUSED(this);
-	BASALT_UNUSED(shape_a);
-	BASALT_UNUSED(transform_a);
-	BASALT_UNUSED(shape_b);
-	BASALT_UNUSED(transform_b);
-	BASALT_UNUSED(manifold);
+	assert(this);
+	assert(shape_a);
+	assert(shape_b);
+	assert(manifold);
 
-	return BASALT_NOT_IMPLEMENTED;
+	Impl_Instance *instance_ptr = (Impl_Instance *)this;
+	Impl_Shape *shape_a_ptr = (Impl_Shape *)basalt_poolGetElement(&instance_ptr->shapes, (Basalt_PoolHandle)shape_a);
+	assert(shape_a_ptr);
+
+	Impl_Shape *shape_b_ptr = (Impl_Shape *)basalt_poolGetElement(&instance_ptr->shapes, (Basalt_PoolHandle)shape_b);
+	assert(shape_b_ptr);
+
+	static PFN_basalt_shapeShapeIntersection handlers[] =
+	{
+		basalt_sphereSphereIntersection,
+		basalt_capsuleSphereIntersection,
+		basalt_boxSphereIntersection,
+		NULL, // swapped case
+		basalt_capsuleCapsuleIntersection,
+		basalt_boxCapsuleIntersection,
+		NULL, // swapped case
+		NULL, // swapped case
+		basalt_boxBoxIntersection,
+	};
+
+	Basalt_ShapeInfo *info_a = &shape_a_ptr->info;
+	Basalt_ShapeInfo *info_b = &shape_b_ptr->info;
+
+	uint32_t swapped = 0;
+	if (info_a->type < info_b->type)
+	{
+		Basalt_ShapeInfo *temp_info = info_a;
+		info_a = info_b;
+		info_b = temp_info;
+		swapped = 1;
+
+		Basalt_Transform temp_transform = transform_a;
+		transform_a = transform_b;
+		transform_b = temp_transform;
+	}
+
+	Basalt_Transform transform = basalt_mulTransform(basalt_invertTransform(transform_a), transform_b);
+
+	PFN_basalt_shapeShapeIntersection handler = handlers[info_b->type * BASALT_SHAPE_TYPE_ENUM_MAX + info_a->type];
+	assert(handler != NULL);
+
+	Basalt_Result result = handler(info_a, info_b, transform, manifold);
+	if (result != BASALT_SUCCESS)
+		return result;
+
+	// postprocess
+	{
+		manifold->normal = basalt_quatRotateVec3(transform_a.rotation, manifold->normal);
+
+		for (uint32_t i = 0; i < manifold->num_contacts; ++i)
+		{
+			Basalt_Contact *contact = &manifold->contacts[i];
+			contact->position = basalt_vec3Add(transform_a.position, basalt_quatRotateVec3(transform_a.rotation, contact->position));
+		}
+	}
+
+	if (swapped)
+	{
+		manifold->normal = (Basalt_Vec3){-manifold->normal.x, -manifold->normal.y, -manifold->normal.z};
+
+		for (uint32_t i = 0; i < manifold->num_contacts; ++i)
+		{
+			Basalt_Contact *contact = &manifold->contacts[i];
+
+			Basalt_ShapeFeature temp = contact->feature_a;
+			contact->feature_a = contact->feature_b;
+			contact->feature_b = temp;
+		}
+	}
+
+	return BASALT_SUCCESS;
 }
 
 Basalt_Result impl_instanceShapeRaycast(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Ray ray, Basalt_RayHit *hit)
