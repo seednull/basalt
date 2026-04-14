@@ -150,11 +150,13 @@ static BASALT_INLINE Basalt_Result basalt_spherePointIntersection(const Basalt_S
 	assert(manifold);
 
 	Basalt_Vec3 normal = basalt_vec3Sub(point, sphere->center);
-	float d = sqrtf(basalt_vec3Dot(normal, normal));
-	float penetration = d - sphere->radius;
+	float d_sqr = basalt_vec3Dot(normal, normal);
 
-	if (penetration > 0.0f)
+	if (d_sqr > sphere->radius * sphere->radius)
 		return BASALT_NO_INTERSECTION;
+
+	float d = sqrtf(d_sqr);
+	float penetration = d - sphere->radius;
 
 	float inv_d = 1.0f / d;
 	normal.x *= inv_d;
@@ -184,11 +186,13 @@ static BASALT_INLINE Basalt_Result basalt_capsulePointIntersection(const Basalt_
 	p[capsule->axis] -= proj;
 
 	Basalt_Vec3 normal = {p[0], p[1], p[2]};
-	float d = sqrtf(basalt_vec3Dot(normal, normal));
-	float penetration = d - capsule->radius;
+	float d_sqr = basalt_vec3Dot(normal, normal);
 
-	if (penetration > 0.0f)
+	if (d_sqr > capsule->radius * capsule->radius)
 		return BASALT_NO_INTERSECTION;
+
+	float d = sqrtf(d_sqr);
+	float penetration = d - capsule->radius;
 
 	float inv_d = 1.0f / d;
 	normal.x *= inv_d;
