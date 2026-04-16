@@ -308,7 +308,7 @@ static BASALT_INLINE Basalt_Result basalt_sphereSphereIntersection(const Basalt_
 	if (l_sqr > r_sum * r_sum)
 		return BASALT_NO_INTERSECTION;
 
-	float l = sqrt(l_sqr);
+	float l = sqrtf(l_sqr);
 	float l_inv = 1.0f / l;
 
 	float penetration = l - r_sum;
@@ -317,7 +317,7 @@ static BASALT_INLINE Basalt_Result basalt_sphereSphereIntersection(const Basalt_
 	manifold->num_contacts = 1;
 	manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
 	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
-	manifold->contacts[0].position = basalt_vec3Mad(delta, 0.5f, sphere_a.center);
+	manifold->contacts[0].position = basalt_vec3Mad(manifold->normal, penetration, sphere_b.center);
 	manifold->contacts[0].penetration = penetration * 0.5f;
 
 	return BASALT_SUCCESS;
@@ -336,21 +336,16 @@ static BASALT_INLINE Basalt_Result basalt_capsuleSphereIntersection(const Basalt
 
 	sphere_b.center = basalt_vec3Add(transform.position, basalt_quatRotateVec3(transform.rotation, sphere_b.center));
 
-	static Basalt_Vec3 capsule_axes[3] =
-	{
-		{1.0f, 0.0f, 0.0f},
-		{0.0f, 1.0f, 0.0f},
-		{0.0f, 0.0f, 1.0f},
-	};
-
-	Basalt_Vec3 axis = capsule_axes[capsule_a.axis];
 	float half_height = capsule_a.height * 0.5f;
 
-	Basalt_Vec3 origin = basalt_vec3Sub(sphere_b.center, capsule_a.center);
+	float origin[3] =
+	{
+		sphere_b.center.x - capsule_a.center.x,
+		sphere_b.center.y - capsule_a.center.y,
+		sphere_b.center.z - capsule_a.center.z
+	};
+	float sphere_center_proj = origin[capsule_a.axis];
 
-	float sphere_offsets[2] = {-half_height, half_height};
-	float sphere_center_proj = basalt_vec3Dot(origin, axis);
-	
 	uint32_t feature_index = 2;
 	if (sphere_center_proj < -half_height)
 	{
@@ -363,15 +358,22 @@ static BASALT_INLINE Basalt_Result basalt_capsuleSphereIntersection(const Basalt
 		feature_index = 1;
 	}
 
-	Basalt_Vec3 closest_point = basalt_vec3Mad(axis, sphere_center_proj, capsule_a.center);
-	Basalt_Vec3 delta = basalt_vec3Sub(sphere_b.center, closest_point);
+	float closest_point[3] = {capsule_a.center.x, capsule_a.center.y, capsule_a.center.z};
+	closest_point[capsule_a.axis] += sphere_center_proj;
+
+	Basalt_Vec3 delta =
+	{
+		sphere_b.center.x - closest_point[0],
+		sphere_b.center.y - closest_point[1],
+		sphere_b.center.z - closest_point[2],
+	};
 	float r_sum = capsule_a.radius + sphere_b.radius;
 
 	float l_sqr = basalt_vec3Dot(delta, delta);
 	if (l_sqr > r_sum * r_sum)
 		return BASALT_NO_INTERSECTION;
 
-	float l = sqrt(l_sqr);
+	float l = sqrtf(l_sqr);
 	float l_inv = 1.0f / l;
 
 	float penetration = l - r_sum;
@@ -380,8 +382,8 @@ static BASALT_INLINE Basalt_Result basalt_capsuleSphereIntersection(const Basalt
 	manifold->num_contacts = 1;
 	manifold->contacts[0].feature_a = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, feature_index};
 	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_SPHERE_SURFACE, 0};
-	manifold->contacts[0].position = basalt_vec3Mad(delta, 0.5f, closest_point);
-	manifold->contacts[0].penetration = penetration * 0.5f;
+	manifold->contacts[0].position = basalt_vec3Mad(manifold->normal, penetration, sphere_b.center);
+	manifold->contacts[0].penetration = penetration;
 
 	return BASALT_SUCCESS;
 }
@@ -398,14 +400,15 @@ static BASALT_INLINE Basalt_Result basalt_boxSphereIntersection(const Basalt_Sha
 	Basalt_ShapeDataSphere sphere_b = info_b->data.sphere;
 
 	Basalt_Vec3 half_sizes = {box_a.sizes.x * 0.5f, box_a.sizes.y * 0.5f, box_a.sizes.z};
+	Basalt_Vec3 box_a_min = basalt_vec3Sub(box_a.center, half_sizes);
+	Basalt_Vec3 box_a_max = basalt_vec3Add(box_a.center, half_sizes);
 
 	sphere_b.center = basalt_vec3Add(transform.position, basalt_quatRotateVec3(transform.rotation, sphere_b.center));
 
-	Basalt_Vec3 clipped = basalt_vec3Sub(sphere_b.center, box_a.center);
-	clipped.x = basalt_floatClamp(clipped.x, -half_sizes.x, half_sizes.x);
-	clipped.y = basalt_floatClamp(clipped.y, -half_sizes.y, half_sizes.y);
-	clipped.z = basalt_floatClamp(clipped.z, -half_sizes.z, half_sizes.z);
-	clipped = basalt_vec3Add(clipped, box_a.center);
+	Basalt_Vec3 clipped = sphere_b.center;
+	clipped.x = basalt_floatClamp(clipped.x, box_a_min.x, box_a_max.x);
+	clipped.y = basalt_floatClamp(clipped.y, box_a_min.y, box_a_max.y);
+	clipped.z = basalt_floatClamp(clipped.z, box_a_min.z, box_a_max.z);
 
 	Basalt_Vec3 delta = basalt_vec3Sub(sphere_b.center, clipped);
 	float l_sqr = basalt_vec3Dot(delta, delta);
