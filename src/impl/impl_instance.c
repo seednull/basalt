@@ -42,6 +42,16 @@ static BASALT_INLINE float basalt_vec3Dot(Basalt_Vec3 a, Basalt_Vec3 b)
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+static BASALT_INLINE Basalt_Vec3 basalt_vec3Cross(Basalt_Vec3 a, Basalt_Vec3 b)
+{
+	return (Basalt_Vec3)
+	{
+		a.y * b.z - a.z * b.y,
+		a.z * b.x - a.x * b.z,
+		a.x * b.y - a.y * b.x
+	};
+}
+
 static BASALT_INLINE Basalt_Vec3 basalt_vec3Mad(Basalt_Vec3 a, float s, Basalt_Vec3 b)
 {
 	return (Basalt_Vec3)
