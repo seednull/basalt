@@ -409,7 +409,7 @@ static BASALT_INLINE Basalt_Result basalt_boxSphereIntersection(const Basalt_Sha
 	Basalt_ShapeDataBox box_a = info_a->data.box;
 	Basalt_ShapeDataSphere sphere_b = info_b->data.sphere;
 
-	Basalt_Vec3 half_sizes = {box_a.sizes.x * 0.5f, box_a.sizes.y * 0.5f, box_a.sizes.z};
+	Basalt_Vec3 half_sizes = {box_a.sizes.x * 0.5f, box_a.sizes.y * 0.5f, box_a.sizes.z * 0.5f};
 	Basalt_Vec3 box_a_min = basalt_vec3Sub(box_a.center, half_sizes);
 	Basalt_Vec3 box_a_max = basalt_vec3Add(box_a.center, half_sizes);
 
