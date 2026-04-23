@@ -192,6 +192,139 @@ static BASALT_INLINE Basalt_Transform basalt_mulTransform(Basalt_Transform a, Ba
 
 /*
  */
+typedef struct Basalt_SegmentManifold_t
+{
+	float results_a[2];
+	float results_b[2];
+	uint32_t num_results;
+} Basalt_SegmentManifold;
+
+static BASALT_INLINE Basalt_SegmentManifold basalt_segmentSegmentIntersection(
+	Basalt_Vec3 center_a,
+	Basalt_Vec3 center_b,
+	Basalt_Vec3 axis_a,
+	Basalt_Vec3 axis_b,
+	float half_height_a,
+	float half_height_b
+)
+{
+	Basalt_Vec3 center_diff = basalt_vec3Sub(center_b, center_a);
+
+	float dot_ab = basalt_vec3Dot(axis_a, axis_b);
+	float dot_ca = basalt_vec3Dot(center_diff, axis_a);
+	float dot_cb = basalt_vec3Dot(center_diff, axis_b);
+
+	float det = dot_ab * dot_ab - 1.0f;
+
+	Basalt_SegmentManifold manifold =
+	{
+		FLT_MAX, FLT_MAX,
+		FLT_MAX, FLT_MAX,
+		0
+	};
+
+	// crossing case
+	if (fabs(det) > 0.05f)
+	{
+		float det_inv = 1.0f / det;
+		float t_a = (dot_ab * dot_cb - dot_ca) * det_inv;
+		float t_b = (dot_cb - dot_ab * dot_ca) * det_inv;
+
+		if (fabs(t_a) > half_height_a || fabs(t_b) > half_height_b)
+		{
+			float tmin_a = -half_height_a;
+			float tmax_a =  half_height_a;
+			float tmin_b = -half_height_b;
+			float tmax_b =  half_height_b;
+
+			float boundaries_a[4] =
+			{
+				tmin_a,
+				tmax_a,
+				basalt_floatClamp(dot_ca + tmin_b * dot_ab, tmin_a, tmax_a),
+				basalt_floatClamp(dot_ca + tmax_b * dot_ab, tmin_a, tmax_a),
+			};
+
+			float boundaries_b[4] =
+			{
+				basalt_floatClamp(-dot_cb + tmin_a * dot_ab, tmin_b, tmax_b),
+				basalt_floatClamp(-dot_cb + tmax_a * dot_ab, tmin_b, tmax_b),
+				tmin_b,
+				tmax_b,
+			};
+
+			float closest_distance_sqr = FLT_MAX;
+			for (uint32_t i = 0; i < 4; ++i)
+			{
+				float tbound_a = boundaries_a[i];
+				float tbound_b = boundaries_b[i];
+
+				Basalt_Vec3 p_a = basalt_vec3Mad(axis_a, tbound_a, center_a);
+				Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, tbound_b, center_b);
+
+				Basalt_Vec3 diff = basalt_vec3Sub(p_b, p_a);
+				float l_sqr = basalt_vec3Dot(diff, diff);
+
+				if (l_sqr < closest_distance_sqr)
+				{
+					closest_distance_sqr = l_sqr;
+					t_a = tbound_a;
+					t_b = tbound_b;
+				}
+			}
+		}
+
+		manifold.results_a[0] = t_a;
+		manifold.results_b[0] = t_b;
+		manifold.num_results = 1;
+	}
+	// near parallel case
+	else
+	{
+		float tmin_a = -half_height_a;
+		float tmax_a =  half_height_a;
+
+		float tmin_b = dot_ca - half_height_b * dot_ab;
+		float tmax_b = dot_ca + half_height_b * dot_ab;
+
+		if (tmin_b > tmax_b)
+			basalt_floatSwap(&tmin_b, &tmax_b);
+
+		if (tmax_a < tmin_b)
+		{
+			manifold.results_a[0] = tmax_a;
+			manifold.results_b[0] = (tmin_b - dot_ca) / dot_ab;
+
+			manifold.num_results = 1;
+		}
+		else if (tmin_a > tmax_b)
+		{
+			manifold.results_a[0] = tmin_a;
+			manifold.results_b[0] = (tmax_b - dot_ca) / dot_ab;
+
+			manifold.num_results = 1;
+		}
+		else
+		{
+			float tmin = basalt_floatMax(tmin_a, tmin_b);
+			float tmax = basalt_floatMin(tmax_a, tmax_b);
+			float dot_ab_inv = 1.0f / dot_ab;
+
+			manifold.results_a[0] = tmin;
+			manifold.results_a[1] = tmax;
+
+			manifold.results_b[0] = (tmin - dot_ca) * dot_ab_inv;
+			manifold.results_b[1] = (tmax - dot_ca) * dot_ab_inv;
+
+			manifold.num_results = 2;
+		}
+	}
+
+	return manifold;
+}
+
+/*
+ */
 static BASALT_INLINE Basalt_Result basalt_spherePointIntersection(const Basalt_ShapeDataSphere *sphere, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
 {
 	assert(sphere);
@@ -498,122 +631,14 @@ static BASALT_INLINE Basalt_Result basalt_capsuleCapsuleIntersection(const Basal
 	float half_height_a = capsule_a.height * 0.5f;
 	float half_height_b = capsule_b.height * 0.5f;
 
-	Basalt_Vec3 center_diff = basalt_vec3Sub(capsule_b.center, capsule_a.center);
-
-	float dot_ab = basalt_vec3Dot(axis_a, axis_b);
-	float dot_ca = basalt_vec3Dot(center_diff, axis_a);
-	float dot_cb = basalt_vec3Dot(center_diff, axis_b);
-
-	float det = dot_ab * dot_ab - 1.0f;
-
-	uint32_t num_candidates = 0;
-	float candidates_a[2] = {FLT_MAX, FLT_MAX};
-	float candidates_b[2] = {FLT_MAX, FLT_MAX};
-
-	// crossing case
-	if (fabs(det) > 0.05f)
-	{
-		float det_inv = 1.0f / det;
-		float t_a = (dot_ab * dot_cb - dot_ca) * det_inv;
-		float t_b = (dot_cb - dot_ab * dot_ca) * det_inv;
-
-		if (fabs(t_a) > half_height_a || fabs(t_b) > half_height_b)
-		{
-			float tmin_a = -half_height_a;
-			float tmax_a =  half_height_a;
-			float tmin_b = -half_height_b;
-			float tmax_b =  half_height_b;
-
-			float boundaries_a[4] =
-			{
-				tmin_a,
-				tmax_a,
-				basalt_floatClamp(dot_ca + tmin_b * dot_ab, tmin_a, tmax_a),
-				basalt_floatClamp(dot_ca + tmax_b * dot_ab, tmin_a, tmax_a),
-			};
-
-			float boundaries_b[4] =
-			{
-				basalt_floatClamp(-dot_cb + tmin_a * dot_ab, tmin_b, tmax_b),
-				basalt_floatClamp(-dot_cb + tmax_a * dot_ab, tmin_b, tmax_b),
-				tmin_b,
-				tmax_b,
-			};
-
-			float closest_distance_sqr = FLT_MAX;
-			for (uint32_t i = 0; i < 4; ++i)
-			{
-				float tbound_a = boundaries_a[i];
-				float tbound_b = boundaries_b[i];
-
-				Basalt_Vec3 p_a = basalt_vec3Mad(axis_a, tbound_a, capsule_a.center);
-				Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, tbound_b, capsule_b.center);
-
-				Basalt_Vec3 diff = basalt_vec3Sub(p_b, p_a);
-				float l_sqr = basalt_vec3Dot(diff, diff);
-
-				if (l_sqr < closest_distance_sqr)
-				{
-					closest_distance_sqr = l_sqr;
-					t_a = tbound_a;
-					t_b = tbound_b;
-				}
-			}
-		}
-
-		candidates_a[0] = t_a;
-		candidates_b[0] = t_b;
-
-		num_candidates = 1;
-	}
-	// near parallel case
-	else
-	{
-		float tmin_a = -half_height_a;
-		float tmax_a =  half_height_a;
-
-		float tmin_b = dot_ca - half_height_b * dot_ab;
-		float tmax_b = dot_ca + half_height_b * dot_ab;
-
-		if (tmin_b > tmax_b)
-			basalt_floatSwap(&tmin_b, &tmax_b);
-
-		if (tmax_a < tmin_b)
-		{
-			candidates_a[0] = tmax_a;
-			candidates_b[0] = (tmin_b - dot_ca) / dot_ab;
-
-			num_candidates = 1;
-		}
-		else if (tmin_a > tmax_b)
-		{
-			candidates_a[0] = tmin_a;
-			candidates_b[0] = (tmax_b - dot_ca) / dot_ab;
-
-			num_candidates = 1;
-		}
-		else
-		{
-			float tmin = basalt_floatMax(tmin_a, tmin_b);
-			float tmax = basalt_floatMin(tmax_a, tmax_b);
-			float dot_ab_inv = 1.0f / dot_ab;
-
-			candidates_a[0] = tmin;
-			candidates_a[1] = tmax;
-
-			candidates_b[0] = (tmin - dot_ca) * dot_ab_inv;
-			candidates_b[1] = (tmax - dot_ca) * dot_ab_inv;
-
-			num_candidates = 2;
-		}
-	}
+	Basalt_SegmentManifold candidates = basalt_segmentSegmentIntersection(capsule_a.center, capsule_b.center, axis_a, axis_b, half_height_a, half_height_b);
 
 	manifold->num_contacts = 0;
 
-	for (uint32_t i = 0; i < num_candidates; ++i)
+	for (uint32_t i = 0; i < candidates.num_results; ++i)
 	{
-		float t_a = candidates_a[i];
-		float t_b = candidates_b[i];
+		float t_a = candidates.results_a[i];
+		float t_b = candidates.results_b[i];
 
 		uint32_t index_a = (t_a == -half_height_a) ? 0 : (t_a == half_height_a) ? 1 : 2;
 		uint32_t index_b = (t_b == -half_height_b) ? 0 : (t_b == half_height_b) ? 1 : 2;
@@ -650,7 +675,241 @@ static BASALT_INLINE Basalt_Result basalt_capsuleCapsuleIntersection(const Basal
 
 static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
 {
-	return BASALT_NOT_IMPLEMENTED;
+	assert(info_a);
+	assert(info_a->type == BASALT_SHAPE_TYPE_BOX);
+	assert(info_b);
+	assert(info_b->type == BASALT_SHAPE_TYPE_CAPSULE);
+	assert(manifold);
+
+	Basalt_ShapeDataBox box_a = info_a->data.box;
+	Basalt_ShapeDataCapsule capsule_b = info_b->data.capsule;
+
+	capsule_b.center = basalt_vec3Add(transform.position, basalt_quatRotateVec3(transform.rotation, capsule_b.center));
+
+	static Basalt_Vec3 basis_axes[3] =
+	{
+		{1.0f, 0.0f, 0.0f},
+		{0.0f, 1.0f, 0.0f},
+		{0.0f, 0.0f, 1.0f},
+	};
+
+	Basalt_Vec3 half_sizes_a = {box_a.sizes.x * 0.5f, box_a.sizes.y * 0.5f, box_a.sizes.z * 0.5f};
+	Basalt_Vec3 axis_b = basis_axes[capsule_b.axis];
+	axis_b = basalt_quatRotateVec3(transform.rotation, axis_b);
+
+	float half_height_b = capsule_b.height * 0.5f;
+
+	Basalt_Vec3 sat_axes[7] = {0};
+
+	uint32_t num_axes = 0;
+	sat_axes[num_axes++] = basis_axes[0];
+	sat_axes[num_axes++] = basis_axes[1];
+	sat_axes[num_axes++] = basis_axes[2];
+	sat_axes[num_axes++] = axis_b;
+
+	for (uint32_t i = 0; i < 3; ++i)
+	{
+		Basalt_Vec3 axis = basalt_vec3Cross(basis_axes[i], axis_b);
+		float l_sqr = basalt_vec3Dot(axis, axis);
+		if (l_sqr == 0.0f)
+			continue;
+
+		float l_inv = 1.0f / sqrtf(l_sqr);
+		axis.x *= l_inv;
+		axis.y *= l_inv;
+		axis.z *= l_inv;
+
+		sat_axes[num_axes++] = axis;
+	}
+
+	capsule_b.center = basalt_vec3Sub(capsule_b.center, box_a.center);
+
+	float min_penetration = FLT_MAX;
+	int min_axis_sign = 0;
+	uint32_t min_axis = UINT32_MAX;
+
+	for (uint32_t i = 0; i < num_axes; ++i)
+	{
+		Basalt_Vec3 axis = sat_axes[i];
+
+		float box_radius = fabsf(axis.x) * half_sizes_a.x + fabsf(axis.y) * half_sizes_a.y + fabsf(axis.z) * half_sizes_a.z;
+
+		float box_min = -box_radius;
+		float box_max =  box_radius;
+
+		float capsule_center = basalt_vec3Dot(capsule_b.center, axis);
+		float capsule_proj = fabsf(basalt_vec3Dot(axis_b, axis));
+
+		float capsule_min = capsule_center - half_height_b * capsule_proj - capsule_b.radius;
+		float capsule_max = capsule_center + half_height_b * capsule_proj + capsule_b.radius;
+
+		if (box_max < capsule_min || capsule_max < box_min)
+			return BASALT_NO_INTERSECTION;
+
+		float penetration = basalt_floatMin(box_max, capsule_max) - basalt_floatMax(box_min, capsule_min);
+		if (penetration < min_penetration)
+		{
+			min_penetration = penetration;
+			min_axis_sign = (capsule_min < box_min) ? 0 : 1;
+			min_axis = i;
+		}
+	}
+
+	uint32_t num_candidates = 0;
+	float candidates[2] = {FLT_MAX, FLT_MAX};
+	float plane[4] = {0};
+	Basalt_ShapeFeature box_feature = {0};
+
+	// capsule-face contact
+	if (min_axis < 3)
+	{
+		int clip_axis0 = (min_axis + 1) % 3;
+		int clip_axis1 = (min_axis + 2) % 3;
+
+		float half_sizes[3] = {half_sizes_a.x, half_sizes_a.y, half_sizes_a.z};
+
+		float clip_planes[5][4] = {0};
+		clip_planes[0][min_axis] = (min_axis_sign == 0) ? -1.0f : 1.0f;
+		clip_planes[1][clip_axis0] = -1.0f;
+		clip_planes[2][clip_axis0] =  1.0f;
+		clip_planes[3][clip_axis1] = -1.0f;
+		clip_planes[4][clip_axis1] =  1.0f;
+
+		clip_planes[0][3] = -half_sizes[min_axis] - capsule_b.radius;
+		clip_planes[1][3] = -half_sizes[clip_axis0];
+		clip_planes[2][3] = -half_sizes[clip_axis0];
+		clip_planes[3][3] = -half_sizes[clip_axis1];
+		clip_planes[4][3] = -half_sizes[clip_axis1];
+
+		float tmin = -half_height_b;
+		float tmax =  half_height_b;
+
+		for (uint32_t i = 0; i < 5; ++i)
+		{
+			Basalt_Vec3 clip_normal = {clip_planes[i][0], clip_planes[i][1], clip_planes[i][2]};
+			float clip_offset = clip_planes[i][3];
+
+			float dot_clipped = basalt_vec3Dot(axis_b, clip_normal);
+			if (dot_clipped == 0)
+				continue;
+
+			float t = (-basalt_vec3Dot(clip_normal, capsule_b.center) - clip_offset) / dot_clipped;
+
+			if (dot_clipped > 0.0f)
+				tmax = basalt_floatMin(tmax, t);
+			else
+				tmin = basalt_floatMax(tmin, t);
+		}
+
+		assert(tmin <= tmax);
+		candidates[num_candidates++] = tmin;
+		candidates[num_candidates++] = tmax;
+
+		box_feature = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CONVEX_FACE, 2 * min_axis + min_axis_sign};
+		for (uint32_t i = 0; i < 4; ++i)
+			plane[i] = clip_planes[0][i];
+	}
+	// capsule-edge contact
+	else
+	{
+		Basalt_Vec3 test_axis = sat_axes[min_axis];
+		if (basalt_vec3Dot(test_axis, capsule_b.center) < 0.0f)
+			test_axis = (Basalt_Vec3){-test_axis.x, -test_axis.y, -test_axis.z};
+
+		float axis[3] = {test_axis.x, test_axis.y, test_axis.z};
+
+		float signs[3] =
+		{
+			(axis[0] < 0.0f) ? -1.0f : 1.0f,
+			(axis[1] < 0.0f) ? -1.0f : 1.0f,
+			(axis[2] < 0.0f) ? -1.0f : 1.0f,
+		};
+
+		float half_sizes[3] = {half_sizes_a.x, half_sizes_a.y, half_sizes_a.z};
+
+		uint32_t min_index = 0;
+		float min_distance = fabsf(axis[0]);
+
+		for (uint32_t i = 1; i < 2; ++i)
+		{
+			float distance = fabsf(axis[i]);
+			if (min_distance > distance)
+			{
+				min_distance = distance;
+				min_index = i;
+			}
+		}
+
+		uint32_t index_1 = (min_index + 1) % 3;
+		uint32_t index_2 = (min_index + 2) % 3;
+
+		float edge_center[3] = {0};
+		edge_center[index_1] = half_sizes[index_1] * signs[index_1];
+		edge_center[index_2] = half_sizes[index_2] * signs[index_2];
+
+		float edge_axis[3] = {0};
+		edge_axis[min_index] = 1.0f;
+
+		Basalt_Vec3 center_a = {edge_center[0], edge_center[1], edge_center[2]};
+		Basalt_Vec3 axis_a = {edge_axis[0], edge_axis[1], edge_axis[2]};
+		float half_height_a = half_sizes[min_index];
+
+		Basalt_SegmentManifold segment_candidates = basalt_segmentSegmentIntersection(center_a, capsule_b.center, axis_a, axis_b, half_height_a, half_height_b);
+
+		for (uint32_t i = 0; i < segment_candidates.num_results; ++i)
+		{
+			float t_a = segment_candidates.results_a[i];
+			float t_b = segment_candidates.results_b[i];
+
+			Basalt_Vec3 p_a = basalt_vec3Mad(axis_a, t_a, center_a);
+			Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, t_b, capsule_b.center);
+
+			Basalt_Vec3 delta = basalt_vec3Sub(p_b, p_a);
+			float r_sqr = capsule_b.radius * capsule_b.radius;
+
+			float l_sqr = basalt_vec3Dot(delta, delta);
+			if (l_sqr > r_sqr)
+				continue;
+
+			candidates[num_candidates++] = t_b;
+		}
+
+		assert(num_candidates > 0);
+
+		uint32_t face1_id = (axis[index_1] < 0.0f) ? index_1 * 2 + 0 : index_1 * 2 + 1;
+		uint32_t face2_id = (axis[index_2] < 0.0f) ? index_2 * 2 + 0 : index_2 * 2 + 1;
+		uint32_t edge_id = face1_id + face2_id * 6;
+
+		box_feature = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CONVEX_EDGE, edge_id};
+		plane[0] = test_axis.x;
+		plane[1] = test_axis.y;
+		plane[2] = test_axis.z;
+		plane[3] = -basalt_vec3Dot(test_axis, center_a);
+	}
+
+	manifold->num_contacts = 0;
+	manifold->normal = (Basalt_Vec3){plane[0], plane[1], plane[2]};
+
+	for (uint32_t i = 0; i < num_candidates; ++i)
+	{
+		float t = candidates[i];
+		uint32_t index = (t == -half_height_b) ? 0 : (t == half_height_b) ? 1 : 2;
+
+		Basalt_Vec3 p = basalt_vec3Mad(axis_b, t, capsule_b.center);
+		float penetration = basalt_vec3Dot(manifold->normal, p) + plane[3];
+		assert(penetration <= 0.0f);
+
+		p = basalt_vec3Add(p, box_a.center);
+
+		Basalt_Contact *contact = &manifold->contacts[manifold->num_contacts++];
+		contact->position = basalt_vec3Mad(manifold->normal, penetration, p);
+		contact->penetration = penetration;
+		contact->feature_a = box_feature;
+		contact->feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, index};
+	}
+
+	assert(manifold->num_contacts > 0);
+	return BASALT_SUCCESS;
 }
 
 static BASALT_INLINE Basalt_Result basalt_boxBoxIntersection(const Basalt_ShapeInfo *info_a, const Basalt_ShapeInfo *info_b, Basalt_Transform transform, Basalt_ContactManifold *manifold)
