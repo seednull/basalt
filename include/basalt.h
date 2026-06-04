@@ -156,7 +156,8 @@ typedef struct Basalt_ShapeInfo_t
 
 typedef struct Basalt_Contact_t
 {
-	Basalt_Vec3 position;
+	Basalt_Vec3 position_a;
+	Basalt_Vec3 position_b;
 	float penetration;
 	Basalt_ShapeFeature feature_a;
 	Basalt_ShapeFeature feature_b;
