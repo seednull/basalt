@@ -1195,32 +1195,28 @@ static BASALT_INLINE Basalt_Result basalt_boxRaycast(const Basalt_ShapeDataBox *
 
 	for (uint32_t i = 0; i < 3; ++i)
 	{
-		float tcmin = FLT_MAX;
-		float tcmax = -FLT_MAX;
-		uint32_t fcmin = UINT32_MAX;
-		uint32_t fcmax = UINT32_MAX;
+		uint32_t index = 2 * i + 0;
+		float result = results[index];
 
-		for (uint32_t j = 0; j < 2; ++j)
+		float tcmin = result;
+		float tcmax =  result;
+		uint32_t fcmin = index;
+		uint32_t fcmax = index;
+
+		index = 2 * i + 1;
+		result = results[index];
+
+		if (tcmin > result)
 		{
-			float result = results[2 * i + j];
-
-			if (tcmin > result)
-			{
-				fcmin = 2 * i + j;
-				tcmin = result;
-			}
-
-			if (tcmax < result)
-			{
-				fcmax = 2 * i + j;
-				tcmax = result;
-			}
+			fcmin = index;
+			tcmin = result;
 		}
 
-		assert(tcmin != FLT_MAX);
-		assert(tcmax != -FLT_MAX);
-		assert(fcmin != UINT32_MAX);
-		assert(fcmax != UINT32_MAX);
+		if (tcmax < result)
+		{
+			fcmax = index;
+			tcmax = result;
+		}
 
 		if (tmin < tcmin)
 		{
