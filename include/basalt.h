@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 // Constants
-#define BASALT_MAX_CONTACT_POINTS 4
+#define BASALT_MAX_CONTACT_POINTS 8
 
 // Opaque handles
 BASALT_DEFINE_HANDLE(Basalt_Instance);
