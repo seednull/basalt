@@ -484,7 +484,7 @@ static BASALT_INLINE Basalt_Result basalt_boxPointIntersection(const Basalt_Shap
 	manifold->num_contacts = 1;
 	manifold->contacts[0].feature_a = feature_data.feature;
 	manifold->contacts[0].feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_POINT, 0};
-	manifold->contacts[0].position_a = basalt_vec3Mad(manifold->normal, feature_data.penetration, point);
+	manifold->contacts[0].position_a = basalt_vec3Add(feature_data.surface, box->center);
 	manifold->contacts[0].position_b = point;
 	manifold->contacts[0].penetration = feature_data.penetration;
 
