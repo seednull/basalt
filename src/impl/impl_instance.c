@@ -378,7 +378,7 @@ static BASALT_INLINE Basalt_BoxFeatureData basalt_boxFeature(Basalt_Vec3 point, 
 	}
 
 	Basalt_Vec3 normal = local_normals[face];
-	Basalt_Vec3 surface = basalt_vec3Mad(normal, penetration, point);
+	Basalt_Vec3 surface = basalt_vec3Mad(normal, -penetration, point);
 
 	if (penetration > 0.0f)
 	{
