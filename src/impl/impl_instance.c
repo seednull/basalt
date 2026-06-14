@@ -763,192 +763,289 @@ static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_Sh
 	float face_sign = min_axis_sign * 2.0f - 1.0f;
 	Basalt_ShapeFeature box_feature = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CONVEX_FACE, 2 * min_axis + min_axis_sign};
 
-	Basalt_SegmentManifold candidates = {0};
 	Basalt_Vec3 face_normal = {0};
-	Basalt_Vec3 edge_axis = {0};
-	Basalt_Vec3 edge_center = {0};
-	float edge_half_length = 0.0f;
+	float face_offset = 0.0f;
+
+	uint32_t clip_axis0 = (min_axis + 1) % 3;
+	uint32_t clip_axis1 = (min_axis + 2) % 3;
+
+	float half_sizes[3] = {half_sizes_a.x, half_sizes_a.y, half_sizes_a.z};
+
+	uint32_t edge_axes[4] = {clip_axis0, clip_axis0, clip_axis1, clip_axis1};
+	float edge_signs[4] = {-1.0f, 1.0f, -1.0f, 1.0f};
 
 	{
-		uint32_t clip_axis0 = (min_axis + 1) % 3;
-		uint32_t clip_axis1 = (min_axis + 2) % 3;
+		float axis[3] = {0};
+		axis[min_axis] = face_sign;
 
-		float half_sizes[3] = {half_sizes_a.x, half_sizes_a.y, half_sizes_a.z};
+		face_normal = (Basalt_Vec3){axis[0], axis[1], axis[2]};
+		face_offset = -half_sizes[min_axis];
+	}
 
-		uint32_t edge_axes[4] = {clip_axis0, clip_axis0, clip_axis1, clip_axis1};
-		float edge_signs[4] = {-1.0f, 1.0f, -1.0f, 1.0f};
+	float tmin = -half_height_b;
+	float tmax =  half_height_b;
+	uint32_t fully_clipped = 0;
 
+	for (uint32_t i = 0; i < 4; ++i)
+	{
+		uint32_t axis_index = edge_axes[i];
+
+		float axis[3] = {0};
+		axis[axis_index] = edge_signs[i];
+
+		Basalt_Vec3 clip_normal = {axis[0], axis[1], axis[2]};
+		float clip_offset = -half_sizes[axis_index];
+
+		Basalt_Vec3 pmin = basalt_vec3Mad(axis_b, tmin, capsule_b.center);
+		Basalt_Vec3 pmax = basalt_vec3Mad(axis_b, tmax, capsule_b.center);
+
+		float s0 = basalt_vec3Dot(clip_normal, pmin) + clip_offset;
+		float s1 = basalt_vec3Dot(clip_normal, pmax) + clip_offset;
+
+		if (s0 > 0.0f && s1 > 0.0f)
 		{
-			float axis[3] = {0};
-			axis[min_axis] = face_sign;
-
-			face_normal = (Basalt_Vec3){axis[0], axis[1], axis[2]};
-			float face_offset = -half_sizes[min_axis];
-
-			float s = basalt_vec3Dot(capsule_b.center, face_normal) + face_offset;
-			edge_center = basalt_vec3Mad(face_normal, -s, capsule_b.center);
-
-			s = basalt_vec3Dot(axis_b, face_normal);
-			edge_axis = basalt_vec3Mad(face_normal, -s, axis_b);
+			fully_clipped = 1;
+			break;
 		}
 
-		float tmin = -half_height_b;
-		float tmax =  half_height_b;
-		uint32_t fully_clipped = 0;
-
-		for (uint32_t i = 0; i < 4; ++i)
+		if (s0 * s1 < 0.0f)
 		{
-			uint32_t axis_index = edge_axes[i];
+			float dot_clipped = basalt_vec3Dot(axis_b, clip_normal);
+			assert(fabs(dot_clipped) > 0.0f);
 
-			float axis[3] = {0};
-			axis[axis_index] = edge_signs[i];
+			float t = -(basalt_vec3Dot(clip_normal, capsule_b.center) + clip_offset) / dot_clipped;
+			assert(t >= tmin && t <= tmax);
 
-			Basalt_Vec3 clip_normal = {axis[0], axis[1], axis[2]};
-			float clip_offset = -half_sizes[axis_index];
+			if (s0 > 0.0f)
+				tmin = t;
 
-			Basalt_Vec3 pmin = basalt_vec3Mad(edge_axis, tmin, edge_center);
-			Basalt_Vec3 pmax = basalt_vec3Mad(edge_axis, tmax, edge_center);
-
-			float s0 = basalt_vec3Dot(clip_normal, pmin) + clip_offset;
-			float s1 = basalt_vec3Dot(clip_normal, pmax) + clip_offset;
-
-			if (s0 > 0.0f && s1 > 0.0f)
-			{
-				fully_clipped = 1;
-				break;
-			}
-
-			if (s0 * s1 < 0.0f)
-			{
-				float dot_clipped = basalt_vec3Dot(edge_axis, clip_normal);
-				assert(fabs(dot_clipped) > 0.0f);
-
-				float t = -(basalt_vec3Dot(clip_normal, edge_center) + clip_offset) / dot_clipped;
-				assert(t >= tmin && t <= tmax);
-
-				if (s0 > 0.0f)
-					tmin = t;
-
-				if (s1 > 0.0f)
-					tmax = t;
-			}
-		}
-
-		if (!fully_clipped)
-		{
-			assert(tmin <= tmax);
-
-			Basalt_Vec3 v0 = basalt_vec3Mad(edge_axis, tmin, edge_center);
-			Basalt_Vec3 v1 = basalt_vec3Mad(edge_axis, tmax, edge_center);
-
-			edge_center = basalt_vec3Lerp(v0, v1, 0.5f);
-			edge_axis = basalt_vec3Sub(v1, v0);
-
-			float l = sqrtf(basalt_vec3Dot(edge_axis, edge_axis));
-			float l_inv = 1.0f / l;
-
-			edge_half_length = l * 0.5f;
-			edge_axis.x *= l_inv;
-			edge_axis.y *= l_inv;
-			edge_axis.z *= l_inv;
-
-			candidates = basalt_segmentSegmentIntersection(edge_center, capsule_b.center, edge_axis, axis_b, edge_half_length, half_height_b);
-		}
-		else
-		{
-			float min_edge_distance = FLT_MAX;
-
-			for (uint32_t i = 0; i < 4; ++i)
-			{
-				uint32_t center_index = edge_axes[i];
-				uint32_t axis_index = edge_axes[(i + 2) % 4];
-
-				float center[3] = {0};
-				center[center_index] = edge_signs[i] * half_sizes[center_index];
-				center[min_axis] = face_sign * half_sizes[min_axis];
-
-				float axis[3] = {0};
-				axis[axis_index] = 1.0f;
-
-				Basalt_Vec3 center_a = {center[0], center[1], center[2]};
-				Basalt_Vec3 axis_a = {axis[0], axis[1], axis[2]};
-				float half_height_a = half_sizes[axis_index];
-
-				Basalt_SegmentManifold segment_candidates = basalt_segmentSegmentIntersection(center_a, capsule_b.center, axis_a, axis_b, half_height_a, half_height_b);
-
-				float t_a = segment_candidates.results_a[0];
-				float t_b = segment_candidates.results_b[0];
-
-				Basalt_Vec3 p_a = basalt_vec3Mad(axis_a, t_a, center_a);
-				Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, t_b, capsule_b.center);
-
-				Basalt_Vec3 delta = basalt_vec3Sub(p_b, p_a);
-				float l_sqr = basalt_vec3Dot(delta, delta);
-
-				if (min_edge_distance > l_sqr)
-				{
-					edge_center = center_a;
-					edge_axis = axis_a;
-					edge_half_length = half_height_a;
-
-					min_edge_distance = l_sqr;
-					candidates = segment_candidates;
-				}
-			}
+			if (s1 > 0.0f)
+				tmax = t;
 		}
 	}
 
 	manifold->num_contacts = 0;
 
-	for (uint32_t i = 0; i < candidates.num_results; ++i)
+	if (!fully_clipped)
 	{
-		float t_a = candidates.results_a[i];
-		float t_b = candidates.results_b[i];
+		assert(tmin <= tmax);
 
-		uint32_t index_b = (t_b == -half_height_b) ? 0 : (t_b == half_height_b) ? 1 : 2;
+		float candidates[2] = {tmin, tmax};
+		float r_sqr = capsule_b.radius * capsule_b.radius;
 
-		Basalt_Vec3 p_a = basalt_vec3Mad(edge_axis, t_a, edge_center);
-		Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, t_b, capsule_b.center);
+		manifold->normal = face_normal;
 
-		Basalt_Vec3 delta = basalt_vec3Sub(p_b, p_a);
-
-		float l_sqr = basalt_vec3Dot(delta, delta);
-		float r = capsule_b.radius;
-
-		if (l_sqr > r * r)
-			continue;
-
-		float penetration = sqrtf(l_sqr);
-
-		if ((fabsf(penetration) > 1e-06))
+		for (uint32_t i = 0; i < 2; ++i)
 		{
-			float penetration_inv = 1.0f / penetration;
+			float t_b = candidates[i];
+			uint32_t index_b = (t_b == -half_height_b) ? 0 : (t_b == half_height_b) ? 1 : 2;
+
+			Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, t_b, capsule_b.center);
+			float d_b = basalt_vec3Dot(p_b, face_normal) + face_offset;
+
+			Basalt_Vec3 p_a = basalt_vec3Mad(face_normal, -d_b, p_b);
+
+			float ray_distance = FLT_MAX;
+			Basalt_Vec3 ray_origin = p_a;
+			Basalt_Vec3 ray_direction = {-face_normal.x, -face_normal.y, -face_normal.z};
+			Basalt_Vec3 ray_origin_shifted = basalt_vec3Sub(ray_origin, capsule_b.center);
+
+			// ray-sphere
+			float sphere_offsets[2] = {-half_height_b, half_height_b};
+			for (uint32_t sphere_idx = 0; sphere_idx < 2; ++sphere_idx)
+			{
+				float t_s = sphere_offsets[sphere_idx];
+				Basalt_Vec3 sphere_center = basalt_vec3Mad(axis_b, t_s, capsule_b.center);
+				Basalt_Vec3 delta = basalt_vec3Sub(ray_origin, sphere_center);
+
+				float dot_od = basalt_vec3Dot(delta, ray_direction);
+				float dot_oo = basalt_vec3Dot(delta, delta);
+				float dot_dd = basalt_vec3Dot(ray_direction, ray_direction);
+
+				float d = dot_od * dot_od - dot_dd * (dot_oo - r_sqr);
+				if (d > 0.0f)
+				{
+					float d_sqrt = sqrtf(d);
+					
+					assert(dot_dd > 0.0f);
+					float dot_dd_rcp = 1.0f / dot_dd;
+					
+					float intersections[2] = {0};
+					intersections[0] = (-dot_od - d_sqrt) * dot_dd_rcp;
+					intersections[1] = (-dot_od + d_sqrt) * dot_dd_rcp;
+
+					for (uint32_t j = 0; j < 2; ++j)
+					{
+						float candidate = intersections[j];
+						if (candidate < 0.0f)
+							continue;
+
+						Basalt_Vec3 test = basalt_vec3Mad(ray_direction, candidate, ray_origin_shifted);
+						float projection = basalt_vec3Dot(test, axis_b);
+						if (t_s < 0.0f && projection > t_s)
+							continue;
+
+						if (t_s > 0.0f && projection < t_s)
+							continue;
+
+						ray_distance = basalt_floatMin(ray_distance, candidate);
+					}
+				}
+			}
+
+			// ray-cylinder
+			{
+				float d_proj = basalt_vec3Dot(ray_direction, axis_b);
+				float o_proj = basalt_vec3Dot(ray_origin_shifted, axis_b);
+
+				Basalt_Vec3 ray_origin_proj = basalt_vec3Mad(axis_b, -o_proj, ray_origin_shifted);
+				Basalt_Vec3 ray_direction_proj = basalt_vec3Mad(axis_b, -d_proj, ray_direction);
+
+				float dot_od = basalt_vec3Dot(ray_origin_proj, ray_direction_proj);
+				float dot_oo = basalt_vec3Dot(ray_origin_proj, ray_origin_proj);
+				float dot_dd = basalt_vec3Dot(ray_direction_proj, ray_direction_proj);
+
+				float d = dot_od * dot_od - dot_dd * (dot_oo - r_sqr);
+				if (d > 0.0f)
+				{
+					float d_sqrt = sqrtf(d);
+
+					assert(dot_dd > 0.0f);
+					float dot_dd_rcp = 1.0f / dot_dd;
+
+					float intersections[2] = {0};
+					intersections[0] = (-dot_od - d_sqrt) * dot_dd_rcp;
+					intersections[1] = (-dot_od + d_sqrt) * dot_dd_rcp;
+
+					for (uint32_t j = 0; j < 2; ++j)
+					{
+						float candidate = intersections[j];
+						if (candidate < 0.0f)
+							continue;
+
+						Basalt_Vec3 test = basalt_vec3Mad(ray_direction, candidate, ray_origin_shifted);
+						float projection = basalt_vec3Dot(test, axis_b);
+						if (fabs(projection) > half_height_b)
+							continue;
+
+						ray_distance = basalt_floatMin(ray_distance, candidate);
+					}
+				}
+			}
+
+			if (ray_distance == FLT_MAX)
+				continue;
+
+			p_a = basalt_vec3Add(p_a, box_a.center);
+			p_b = basalt_vec3Add(p_b, box_a.center);
+
+			float penetration = -ray_distance;
+
+			Basalt_Contact *contact = &manifold->contacts[manifold->num_contacts++];
+			contact->feature_a = box_feature;
+			contact->feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, index_b};
+			contact->position_a = p_a;
+			contact->position_b = basalt_vec3Mad(manifold->normal, penetration, p_a);
+			contact->penetration = penetration;
+		}
+	}
+	else
+	{
+		float min_edge_distance = FLT_MAX;
+
+		Basalt_SegmentManifold candidates = {0};
+		Basalt_Vec3 edge_axis = {0};
+		Basalt_Vec3 edge_center = {0};
+		float edge_half_length = 0.0f;
+
+		for (uint32_t i = 0; i < 4; ++i)
+		{
+			uint32_t center_index = edge_axes[i];
+			uint32_t axis_index = edge_axes[(i + 2) % 4];
+
+			float center[3] = {0};
+			center[center_index] = edge_signs[i] * half_sizes[center_index];
+			center[min_axis] = face_sign * half_sizes[min_axis];
+
+			float axis[3] = {0};
+			axis[axis_index] = 1.0f;
+
+			Basalt_Vec3 center_a = {center[0], center[1], center[2]};
+			Basalt_Vec3 axis_a = {axis[0], axis[1], axis[2]};
+			float half_height_a = half_sizes[axis_index];
+
+			Basalt_SegmentManifold segment_candidates = basalt_segmentSegmentIntersection(center_a, capsule_b.center, axis_a, axis_b, half_height_a, half_height_b);
+
+			float t_a = segment_candidates.results_a[0];
+			float t_b = segment_candidates.results_b[0];
+
+			Basalt_Vec3 p_a = basalt_vec3Mad(axis_a, t_a, center_a);
+			Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, t_b, capsule_b.center);
+
+			Basalt_Vec3 delta = basalt_vec3Sub(p_b, p_a);
+			float l_sqr = basalt_vec3Dot(delta, delta);
+
+			if (min_edge_distance > l_sqr)
+			{
+				edge_center = center_a;
+				edge_axis = axis_a;
+				edge_half_length = half_height_a;
+
+				min_edge_distance = l_sqr;
+				candidates = segment_candidates;
+			}
+		}
+
+		for (uint32_t i = 0; i < candidates.num_results; ++i)
+		{
+			float t_a = candidates.results_a[i];
+			float t_b = candidates.results_b[i];
+
+			uint32_t index_b = (t_b == -half_height_b) ? 0 : (t_b == half_height_b) ? 1 : 2;
+
+			Basalt_Vec3 p_a = basalt_vec3Mad(edge_axis, t_a, edge_center);
+			Basalt_Vec3 p_b = basalt_vec3Mad(axis_b, t_b, capsule_b.center);
+
+			Basalt_Vec3 delta = basalt_vec3Sub(p_b, p_a);
 			float dot_sign = basalt_vec3Dot(delta, face_normal) < 0.0f ? -1.0f : 1.0f;
 
-			delta.x *= penetration_inv * dot_sign;
-			delta.y *= penetration_inv * dot_sign;
-			delta.z *= penetration_inv * dot_sign;
+			float l_sqr = basalt_vec3Dot(delta, delta);
+			float r = capsule_b.radius;
 
-			penetration -= r * dot_sign;
-			penetration *= dot_sign;
+			if (dot_sign > 0.0f && l_sqr > r * r)
+				continue;
+
+			float penetration = sqrtf(l_sqr);
+
+			if ((fabsf(penetration) > 1e-06))
+			{
+				float penetration_inv = 1.0f / penetration;
+
+				delta.x *= penetration_inv * dot_sign;
+				delta.y *= penetration_inv * dot_sign;
+				delta.z *= penetration_inv * dot_sign;
+
+				penetration -= r * dot_sign;
+				penetration *= dot_sign;
+			}
+			else
+			{
+				delta = face_normal;
+				penetration -= r;
+			}
+
+			p_a = basalt_vec3Add(p_a, box_a.center);
+			p_b = basalt_vec3Add(p_b, box_a.center);
+
+			manifold->normal = (Basalt_Vec3){delta.x, delta.y, delta.z};
+
+			Basalt_Contact *contact = &manifold->contacts[manifold->num_contacts++];
+			contact->feature_a = box_feature;
+			contact->feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, index_b};
+			contact->position_a = p_a;
+			contact->position_b = basalt_vec3Mad(manifold->normal, -capsule_b.radius, p_b);
+			contact->penetration = penetration;
 		}
-		else
-		{
-			delta = face_normal;
-			penetration -= r;
-		}
-
-		p_a = basalt_vec3Add(p_a, box_a.center);
-		p_b = basalt_vec3Add(p_b, box_a.center);
-
-		manifold->normal = (Basalt_Vec3){delta.x, delta.y, delta.z};
-
-		Basalt_Contact *contact = &manifold->contacts[manifold->num_contacts++];
-		contact->feature_a = box_feature;
-		contact->feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, index_b};
-		contact->position_a = p_a;
-		contact->position_b = basalt_vec3Mad(manifold->normal, -capsule_b.radius, p_b);
-		contact->penetration = penetration;
 	}
 
 	if (manifold->num_contacts == 0)
