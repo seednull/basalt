@@ -14,7 +14,7 @@ typedef struct Basalt_InstanceInternal_t
  */
 Basalt_Result basaltCreateInstance(const Basalt_InstanceDesc *desc, Basalt_Instance *instance)
 {
-	return impl_createInstance(desc, instance);
+	return impl_basaltCreateInstance(desc, instance);
 }
 
 Basalt_Result basaltGetInstanceTable(Basalt_Instance instance, Basalt_InstanceTable *instance_table)

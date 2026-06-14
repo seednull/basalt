@@ -1734,7 +1734,7 @@ static void impl_destroyShape(Impl_Instance *instance_ptr, Impl_Shape *shape_ptr
 
 /*
  */
-Basalt_Result impl_instanceCreateShapeSphere(Basalt_Instance this, Basalt_Vec3 center, float radius, Basalt_Shape *shape)
+static Basalt_Result impl_instanceCreateShapeSphere(Basalt_Instance this, Basalt_Vec3 center, float radius, Basalt_Shape *shape)
 {
 	assert(this);
 	assert(shape);
@@ -1749,7 +1749,7 @@ Basalt_Result impl_instanceCreateShapeSphere(Basalt_Instance this, Basalt_Vec3 c
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceCreateShapeCapsule(Basalt_Instance this, Basalt_Vec3 center, float radius, float height, Basalt_CapsuleAxis axis, Basalt_Shape *shape)
+static Basalt_Result impl_instanceCreateShapeCapsule(Basalt_Instance this, Basalt_Vec3 center, float radius, float height, Basalt_CapsuleAxis axis, Basalt_Shape *shape)
 {
 	assert(this);
 	assert(shape);
@@ -1764,7 +1764,7 @@ Basalt_Result impl_instanceCreateShapeCapsule(Basalt_Instance this, Basalt_Vec3 
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceCreateShapeBox(Basalt_Instance this, Basalt_Vec3 center, Basalt_Vec3 sizes, Basalt_Shape *shape)
+static Basalt_Result impl_instanceCreateShapeBox(Basalt_Instance this, Basalt_Vec3 center, Basalt_Vec3 sizes, Basalt_Shape *shape)
 {
 	assert(this);
 	assert(shape);
@@ -1779,7 +1779,7 @@ Basalt_Result impl_instanceCreateShapeBox(Basalt_Instance this, Basalt_Vec3 cent
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceShapeGetInfo(Basalt_Instance this, Basalt_Shape shape, Basalt_ShapeInfo *info)
+static Basalt_Result impl_instanceShapeGetInfo(Basalt_Instance this, Basalt_Shape shape, Basalt_ShapeInfo *info)
 {
 	assert(this);
 	assert(shape);
@@ -1796,7 +1796,7 @@ Basalt_Result impl_instanceShapeGetInfo(Basalt_Instance this, Basalt_Shape shape
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
+static Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Vec3 point, Basalt_ContactManifold *manifold)
 {
 	assert(this);
 	assert(shape);
@@ -1859,7 +1859,7 @@ Basalt_Result impl_instanceShapeIntersectPoint(Basalt_Instance this, Basalt_Shap
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceShapeIntersectShape(Basalt_Instance this, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold)
+static Basalt_Result impl_instanceShapeIntersectShape(Basalt_Instance this, Basalt_Shape shape_a, Basalt_Transform transform_a, Basalt_Shape shape_b, Basalt_Transform transform_b, Basalt_ContactManifold *manifold)
 {
 	assert(this);
 	assert(shape_a);
@@ -1945,7 +1945,7 @@ Basalt_Result impl_instanceShapeIntersectShape(Basalt_Instance this, Basalt_Shap
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceShapeRaycast(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Ray ray, Basalt_RayHit *hit)
+static Basalt_Result impl_instanceShapeRaycast(Basalt_Instance this, Basalt_Shape shape, Basalt_Transform transform, Basalt_Ray ray, Basalt_RayHit *hit)
 {
 	assert(this);
 	assert(shape);
@@ -2003,7 +2003,7 @@ Basalt_Result impl_instanceShapeRaycast(Basalt_Instance this, Basalt_Shape shape
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceDestroyShape(Basalt_Instance this, Basalt_Shape shape)
+static Basalt_Result impl_instanceDestroyShape(Basalt_Instance this, Basalt_Shape shape)
 {
 	assert(this);
 	assert(shape);
@@ -2021,7 +2021,7 @@ Basalt_Result impl_instanceDestroyShape(Basalt_Instance this, Basalt_Shape shape
 	return BASALT_SUCCESS;
 }
 
-Basalt_Result impl_instanceDestroy(Basalt_Instance this)
+static Basalt_Result impl_instanceDestroy(Basalt_Instance this)
 {
 	assert(this);
 
@@ -2064,7 +2064,7 @@ static Basalt_InstanceTable instance_vtbl =
 
 /*
  */
-Basalt_Result impl_createInstance(const Basalt_InstanceDesc *desc, Basalt_Instance *instance)
+Basalt_Result impl_basaltCreateInstance(const Basalt_InstanceDesc *desc, Basalt_Instance *instance)
 {
 	assert(desc);
 	assert(instance);
