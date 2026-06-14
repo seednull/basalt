@@ -846,7 +846,7 @@ static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_Sh
 			Basalt_Vec3 p_a = basalt_vec3Mad(face_normal, -d_b, p_b);
 
 			float ray_distance = FLT_MAX;
-			Basalt_Vec3 ray_origin = p_a;
+			Basalt_Vec3 ray_origin = p_b;
 			Basalt_Vec3 ray_direction = {-face_normal.x, -face_normal.y, -face_normal.z};
 			Basalt_Vec3 ray_origin_shifted = basalt_vec3Sub(ray_origin, capsule_b.center);
 
@@ -855,8 +855,7 @@ static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_Sh
 			for (uint32_t sphere_idx = 0; sphere_idx < 2; ++sphere_idx)
 			{
 				float t_s = sphere_offsets[sphere_idx];
-				Basalt_Vec3 sphere_center = basalt_vec3Mad(axis_b, t_s, capsule_b.center);
-				Basalt_Vec3 delta = basalt_vec3Sub(ray_origin, sphere_center);
+				Basalt_Vec3 delta = basalt_vec3Mad(axis_b, -t_s, ray_origin_shifted);
 
 				float dot_od = basalt_vec3Dot(delta, ray_direction);
 				float dot_oo = basalt_vec3Dot(delta, delta);
@@ -869,10 +868,12 @@ static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_Sh
 					
 					assert(dot_dd > 0.0f);
 					float dot_dd_rcp = 1.0f / dot_dd;
-					
+
 					float intersections[2] = {0};
 					intersections[0] = (-dot_od - d_sqrt) * dot_dd_rcp;
 					intersections[1] = (-dot_od + d_sqrt) * dot_dd_rcp;
+
+					float sign = (t_s < 0.0f) ? -1.0f : 1.0f;
 
 					for (uint32_t j = 0; j < 2; ++j)
 					{
@@ -881,11 +882,9 @@ static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_Sh
 							continue;
 
 						Basalt_Vec3 test = basalt_vec3Mad(ray_direction, candidate, ray_origin_shifted);
-						float projection = basalt_vec3Dot(test, axis_b);
-						if (t_s < 0.0f && projection > t_s)
-							continue;
+						float projection = basalt_vec3Dot(test, axis_b) * sign;
 
-						if (t_s > 0.0f && projection < t_s)
+						if (projection < half_height_b)
 							continue;
 
 						ray_distance = basalt_floatMin(ray_distance, candidate);
@@ -933,19 +932,20 @@ static BASALT_INLINE Basalt_Result basalt_boxCapsuleIntersection(const Basalt_Sh
 				}
 			}
 
-			if (ray_distance == FLT_MAX)
+			assert(ray_distance != FLT_MAX);
+
+			float penetration = d_b - ray_distance;
+			if (penetration > 0.0f)
 				continue;
 
 			p_a = basalt_vec3Add(p_a, box_a.center);
 			p_b = basalt_vec3Add(p_b, box_a.center);
 
-			float penetration = -ray_distance;
-
 			Basalt_Contact *contact = &manifold->contacts[manifold->num_contacts++];
 			contact->feature_a = box_feature;
 			contact->feature_b = (Basalt_ShapeFeature){BASALT_SHAPE_FEATURE_TYPE_CAPSULE_SURFACE, index_b};
 			contact->position_a = p_a;
-			contact->position_b = basalt_vec3Mad(manifold->normal, penetration, p_a);
+			contact->position_b = basalt_vec3Mad(manifold->normal, -ray_distance, p_b);
 			contact->penetration = penetration;
 		}
 	}
