@@ -1516,7 +1516,7 @@ static BASALT_INLINE Basalt_Result basalt_capsuleRaycast(const Basalt_ShapeDataC
 	for (uint32_t sphere_id = 0; sphere_id < 2; ++sphere_id)
 	{
 		float t_s = sphere_offsets[sphere_id];
-		Basalt_Vec3 sphere_origin = basalt_vec3Mad(axis, t_s, origin);
+		Basalt_Vec3 sphere_origin = basalt_vec3Mad(axis, -t_s, origin);
 
 		float dot_od = basalt_vec3Dot(sphere_origin, ray.direction);
 		float dot_oo = basalt_vec3Dot(sphere_origin, sphere_origin);
@@ -1535,6 +1535,8 @@ static BASALT_INLINE Basalt_Result basalt_capsuleRaycast(const Basalt_ShapeDataC
 		candidates[0] = (-dot_od - d_sqrt) * dot_dd_rcp;
 		candidates[1] = (-dot_od + d_sqrt) * dot_dd_rcp;
 
+		float sign = (t_s < 0.0f) ? -1.0f : 1.0f;
+
 		for (uint32_t i = 0; i < 2; ++i)
 		{
 			float candidate = candidates[i];
@@ -1542,12 +1544,9 @@ static BASALT_INLINE Basalt_Result basalt_capsuleRaycast(const Basalt_ShapeDataC
 				continue;
 
 			Basalt_Vec3 test = basalt_vec3Mad(ray.direction, candidate, origin);
-			float projection = basalt_vec3Dot(test, axis);
+			float projection = basalt_vec3Dot(test, axis) * sign;
 
-			if (t_s < 0.0f && projection > t_s)
-				continue;
-
-			if (t_s > 0.0f && projection < t_s)
+			if (projection < half_height)
 				continue;
 
 			if (distance > candidate)
